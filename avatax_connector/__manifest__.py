@@ -3,7 +3,7 @@
     "name": "Avalara Avatax Connector",
     "version": "1.0",
     "author": "Odoo S.A.",
-    "summary": "Sales tax Calculation",\
+    "summary": "Sales tax Calculation",
     "license": "GPL-3",
     "description": """
 
