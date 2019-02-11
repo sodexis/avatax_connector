@@ -2,7 +2,7 @@
 {
     "name": "Avalara Avatax Connector",
     "version": "1.0",
-    "author": "Odoo S.A.",
+    "author": "Fabrice Henrion",
     "summary": "Sales tax Calculation",
     "description": """
 
@@ -23,7 +23,6 @@ This module has Following Features:
 
 """,
     "category": "Generic Modules/Accounting",
-    "website": "https://www.odoo.com/",
     "depends": ['base', 'account_accountant', 'sale', 'stock'   ],
     "data": [
         "security/avalara_salestax_security.xml",
