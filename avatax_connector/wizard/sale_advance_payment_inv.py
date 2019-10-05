@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
 
 
@@ -13,7 +12,7 @@ class SaleAdvancePaymentInv(models.TransientModel):
             'exemption_code': order.exemption_code or '',
             'exemption_code_id': order.exemption_code_id.id or False,
             'location_code': order.location_code or '',
-            'tax_on_shipping_address': order.tax_add_shipping,
+            'tax_on_shipping_address': order.tax_on_shipping_address,
         })
-        invoice.compute()
+        #invoice.compute_taxes()
         return invoice
