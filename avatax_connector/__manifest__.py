@@ -1,14 +1,17 @@
-# -*- coding: utf-8 -*-
 {
     "name": "Avalara Avatax Connector",
-    'version': '12.0.1.0.0',
-    "author": "Fabrice Henrion, Sodexis Inc<dev@sodexis.com>",
-    "website": "http://www.sodexis.com",
+    "version": "12.0.2.0.0",
+    "author": "Fabrice Henrion, Sodexis"
+              ", Open Source Integrators",
     "summary": "Sales tax Calculation",
     "license": "Other proprietary",
     "description": """
 
-The Avatax module automates the complex task of sales tax calculation with ease.  Sale tax calculations are based on prevalidated shop, warehouse and customer address.  This app plugs into your current installation of odoo with minimal configuration and just works.  Your sales orders, invoices and refunds activity is automatically calculated from Avalara's calc service returning the proper sales tax and places the tax into the order/invoice seamlessly.
+The Avatax module automates the complex task of sales tax calculation with ease.
+Sale tax calculations are based on prevalidated shop, warehouse and customer address.
+This app plugs into your current installation of odoo with minimal configuration and just works.
+Your sales orders, invoices and refunds activity is automatically calculated from Avalara's calc service
+returning the proper sales tax and places the tax into the order/invoice seamlessly.
 
 This module has Following Features:
 
@@ -20,12 +23,17 @@ This module has Following Features:
 6. Use both Avalara and Odoo Taxes etc
 7. International support
 8. Discount management
-9. Reporting record through an avalara management console to verify transactions
+9. Detailed logging to verify transactions
 10. Documentation included
 
 """,
     "category": "Generic Modules/Accounting",
-    "depends": ['base', 'account_accountant', 'sale', 'stock',],
+    "depends": [
+        'account',
+        'sale',
+        'stock',
+        'base_geolocalize',
+    ],
     "data": [
         "security/avalara_salestax_security.xml",
         "security/ir.model.access.csv",
@@ -35,20 +43,17 @@ This module has Following Features:
         "views/avalara_salestax_data.xml",
         "views/partner_view.xml",
         "views/product_view.xml",
-        "views/account_invoice_workflow.xml",
+        "views/account_invoice_action.xml",
         "views/account_invoice_view.xml",
         "views/sale_order_view.xml",
+        "views/sale_order_action.xml",
         "views/account_tax_view.xml",
         "report/sale_order_templates.xml",
-        #"views/demo.xml",
+        #"views/res_config_settings_view.xml",
     ],
-    "test": [],
     'images': [
         'static/description/avatax_icon.png',
     ],
     'installable': True,
-    'auto_install': False,
     'application': True,
 }
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

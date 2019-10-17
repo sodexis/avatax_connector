@@ -1,38 +1,27 @@
-# -*- coding: utf-8 -*-
-
 import suds
+import suds.client  # Avoid AttributeError: module 'suds' has no attribute 'client' ?
 import socket
 import os
 import datetime
 import logging
 
-#import base64
 from odoo import tools
 from odoo.tools.translate import _
 from odoo import fields
 from odoo.exceptions import UserError
+
 
 _logger = logging.getLogger(__name__)
 
 
 class AvaTaxService:
 
-    def enable_log(self):
-        import logging, tempfile
-        logger = logging.getLogger('suds.client')
-        logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler(os.path.join(tempfile.gettempdir(), "soap-messages.log"))
-        logger.propagate = False
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-
     def __init__(self, username, password, url, timeout, enable_log=False):
-        self.username = username    # This is the company's Development/Production Account number
-        self.password = password    # Put in the License Key received from AvaTax
+        self.username = username  # This is the company's Development/Production Account number
+        self.password = password  # Put in the License Key received from AvaTax
         self.url = url
         self.timeout = timeout
-        enable_log and self.enable_log()
+        self.is_log_enabled = enable_log
 
     def create_tax_service(self):
         self.taxSvc = self.service('tax')
@@ -50,7 +39,7 @@ class AvaTaxService:
         nameCap = name.capitalize()    # So this will be 'Tax' or 'Address'
         # The Python SUDS library can fetch the WSDL down from the server
         # or use a local file URL. We'll use a local file URL.
-#        wsdl_url = 'file:///' + os.getcwd().replace('\\', '/') + '/%ssvc.wsdl.xml' % name
+        #    wsdl_url = 'file:///' + os.getcwd().replace('\\', '/') + '/%ssvc.wsdl.xml' % name
         # If you want to fetch the WSDL from the server, use this instead:
         wsdl_url = 'https://avatax.avalara.net/%s/%ssvc.wsdl' % (nameCap, nameCap)
 
@@ -73,13 +62,10 @@ class AvaTaxService:
         return security
 
     def my_profile(self):
-
         # Set elements adapter defaults
-        ADAPTER = 'Odoo S.A.'
-
+        ADAPTER = 'Odoo, by Open Source Integrators'
         # Profile Client.
-        CLIENT = 'a0o33000004WSkW'
-
+        CLIENT = 'a0o0b0000058pOuAAI'
         #Build the Profile element
         profileNameSpace = ('ns1', 'http://avatax.avalara.com/services')
         profile = suds.sax.element.Element('Profile', ns=profileNameSpace)
@@ -91,19 +77,33 @@ class AvaTaxService:
 
     def get_result(self, svc, operation, request):
         result = operation(request)
-
         if (result.ResultCode != 'Success'):
-            #for w_message in result.Messages.Message:
-            # w_message = result.Messages.Message[0]
             for w_message in result.Messages.Message:
-                # print"w_message",w_message
                 if w_message.Severity == 'Error':
-                    if (w_message._Name == 'TaxAddressError' or w_message._Name == 'AddressRangeError' or w_message._Name == 'AddressUnknownStreetError' or w_message._Name == 'AddressNotGeocodedError' or w_message._Name == 'NonDeliverableAddressError'):
-                        raise UserError(_('AvaTax: Warning AvaTax could not validate the street address. \n You can save the address and AvaTax will make an attempt to compute taxes based on the zip code if "Force Address Validation" is disabled in the Avatax connector configuration.  \n\n Also please ensure that the company address is set and Validated.  You can get there by going to Sales->Customers and removing "Customers" filter from the search at the top.  Then go to your company contact info and validate your address in the Avatax Tab'))
+                    if (w_message._Name == 'TaxAddressError' or
+                            w_message._Name == 'AddressRangeError' or
+                            w_message._Name == 'AddressUnknownStreetError' or
+                            w_message._Name == 'AddressNotGeocodedError'
+                            or w_message._Name == 'NonDeliverableAddressError'):
+                        raise UserError(_(
+                            'AvaTax: Warning AvaTax could not validate the street address. \n '
+                            'You can save the address and AvaTax will make an attempt to '
+                            'compute taxes based on the zip code if "Force Address Validation" is disabled '
+                            'in the Avatax connector configuration.  \n\n '
+                            'Also please ensure that the company address is set and Validated.  '
+                            'You can get there by going to Sales->Customers '
+                            'and removing "Customers" filter from the search at the top.  '
+                            'Then go to your company contact info and validate your address in the Avatax Tab'))
                     elif (w_message._Name == 'UnsupportedCountryError'):
-                        raise UserError(_("AvaTax: Notice\n\n Address Validation for this country not supported. But, Avalara will still calculate global tax rules."))
+                        raise UserError(_(
+                            "AvaTax: Notice\n\n Address Validation for this country not supported. "
+                            "But, Avalara will still calculate global tax rules."))
                     else:
-                        raise UserError(_('AvaTax: Error: '+str(w_message._Name)+"\n\n" "Summary: " + w_message.Summary + "\n Details: " + str(w_message.Details or '') + "\n Severity: " + w_message.Severity))
+                        raise UserError(_(
+                            'AvaTax: Error: ' + str(w_message._Name) +
+                            "\n\n" "Summary: " + w_message.Summary +
+                            "\n Details: " + str(w_message.Details or '') +
+                            "\n Severity: " + w_message.Severity))
         else:
             return result
 
@@ -135,14 +135,16 @@ class AvaTaxService:
             return information about how the tax was calculated. Intended for use only while the SDK is in a development environment.
         """
         if commit:
-            _logger.info('committing document %s (type: %s)', doc_code, doc_type)
+            _logger.info('GetTaxrequest committing document %s (type: %s)', doc_code, doc_type)
+        else:
+            _logger.info('GetTaxRequest for document %s (type: %s)', doc_code, doc_type)
         lineslist = []
         request = self.taxSvc.factory.create('GetTaxRequest')
         request.Commit = commit
         request.DetailLevel = 'Diagnostic'
-#        request.DetailLevel = 'Document'
+        # request.DetailLevel = 'Document'
         request.Discount = 0.0
-        request.ServiceMode = 'Automatic'    ##service mode = Automatic/Local/Remote
+        request.ServiceMode = 'Automatic'  # service mode = Automatic/Local/Remote
         request.PaymentDate = doc_date
         request.ExchangeRate = 45
         request.ExchangeRateEffDate = fields.Date.today()
@@ -173,7 +175,13 @@ class AvaTaxService:
         addresses = self.taxSvc.factory.create('ArrayOfBaseAddress')
         addresses.BaseAddress = [origin, destination]
         if origin.Line1 == False:
-            raise UserError(_('Please set the Company Address in the partner information and validate.  We are checking against the first line of the address and it\'s empty.  \n\n Typically located in Sales->Customers, you have to clear "Customers" from search filter and type in your own company name.  Ensure the address is filled out and go to Avatax tab in the partner information and validate the address. Save partner update when done.'))
+            raise UserError(_(
+                'Please set the Company Address in the partner information and validate.  '
+                'We are checking against the first line of the address and it\'s empty.  \n\n '
+                'Typically located in Sales->Customers, you have to clear "Customers" '
+                'from search filter and type in your own company name.  '
+                'Ensure the address is filled out and go to Avatax tab in the partner information '
+                'and validate the address. Save partner update when done.'))
         request.Addresses = addresses
         request.OriginCode = '0'    # Referencing an address above
         request.DestinationCode = '1'    # Referencing an address above
@@ -194,7 +202,12 @@ class AvaTaxService:
         lines.Line = lineslist
         request.Lines = lines
         # And we're ready to make the call
+        #import traceback; traceback.print_stack()  #import pudb; pu.db
         result = self.get_result(self.taxSvc, self.taxSvc.service.GetTax, request)
+        # This helps trace the source of redundant API calls
+        if self.is_log_enabled:
+            _logger.info(request)
+            _logger.info(result)
         return result
 
     def get_tax_history(self, company_code, doc_code, doc_type):
@@ -203,7 +216,7 @@ class AvaTaxService:
         request.CompanyCode = company_code
         request.DocCode = doc_code
         request.DocType = doc_type
-#        request.CancelCode = cancel_code
+        # request.CancelCode = cancel_code
         result = self.get_result(self.taxSvc, self.taxSvc.service.GetTaxHistory, request)
         return result
 
@@ -216,9 +229,11 @@ class AvaTaxService:
         result = self.get_result(self.taxSvc, self.taxSvc.service.CancelTax, request)
         return result
 
+
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
+
 
 class AvaTaxError(Error):
     """Exception raised for errors calling AvaTax.
@@ -238,9 +253,10 @@ class AvaTaxError(Error):
         for item in self.messages:
             message = item[1][0]    # SUDS gives us the message in a list, in a tuple
 
-            output_str = "Severity: %s\n\nDetails: %s\n\n RefersTo: %s\n\n Summary: %s" \
-            % (message.Severity, message.Details, message.RefersTo, message.Summary)
+            output_str = "Severity: %s\n\nDetails: %s\n\n RefersTo: %s\n\n Summary: %s" % (
+                message.Severity, message.Details, message.RefersTo, message.Summary)
         return output_str
+
 
 class BaseAddress:
 
@@ -254,6 +270,7 @@ class BaseAddress:
         self.data.Region = Region
         self.data.Country = Country
         self.data.AddressCode = AddressCode
+
 
 class Line:
 
@@ -272,5 +289,3 @@ class Line:
         line.Qty = 1
         line.Discounted = False
         return line
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

@@ -1,32 +1,37 @@
-# -*- coding: utf-8 -*-
-
-from odoo import api, fields, models, _
-import time
 import logging
 from random import random
-from .avalara_api import AvaTaxService, BaseAddress
+import time
+from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 from odoo.tools import DEFAULT_SERVER_DATE_FORMAT
 from odoo.addons.base.models.res_partner import ADDRESS_FIELDS
+from .avalara_api import AvaTaxService, BaseAddress
 
-_logger = logging.getLogger(__name__)
+
+_LOGGER = logging.getLogger(__name__)
 
 
-class res_partner(models.Model):
+class ResPartner(models.Model):
     """Update partner information by adding new fields according to avalara partner configuration"""
     _inherit = 'res.partner'
 
     exemption_number = fields.Char('Exemption Number', help="Indicates if the customer is exempt or not")
     exemption_code_id = fields.Many2one('exemption.code', 'Exemption Code', help="Indicates the type of exemption the customer may have")
-#    tax_schedule_id = fields.Many2one('tax.schedule', 'Tax Schedule', help="Identifies customers using AVATAX. Only customers with AVATAX designation triggers tax calculation from AvaTax otherwise it will follow the normal tax calculation that odoo provides")
     date_validation = fields.Date('Last Validation Date', readonly=True, help="The date the address was last validated by AvaTax and accepted")
-    validation_method = fields.Selection([('avatax', 'AVALARA'), ('usps', 'USPS'), ('other', 'Other')], 'Address Validation Method', readonly=True, help="It gets populated when the address is validated by the method")
-    latitude = fields.Char('Latitude')
-    longitude = fields.Char('Longitude')
+    validation_method = fields.Selection(
+        [('avatax', 'AVALARA'), ('usps', 'USPS'), ('other', 'Other')],
+        'Address Validation Method',
+        readonly=True,
+        help="It gets populated when the address is validated by the method")
     validated_on_save = fields.Boolean('Validated On Save', help="Indicates if the address is already validated on save before calling the wizard")
     customer_code = fields.Char('Customer Code')
     tax_exempt = fields.Boolean('Is Tax Exempt', help="Indicates the exemption tax calculation is compulsory")
-    vat_id = fields.Char("VAT ID", help="Customers VAT number (Buyer VAT). Identifies the customer as a “Registered Business” and the tax engine will utilize that information in the tax decision process.")
+    vat_id = fields.Char(
+        "VAT ID",
+        help="Customers VAT number (Buyer VAT). "
+        "Identifies the customer as a “Registered Business” "
+        "and the tax engine will utilize that information "
+        "in the tax decision process.")
 
     _sql_constraints = [
         ('name_uniq', 'unique(customer_code)', 'Customer Code must be unique!'),
@@ -34,16 +39,20 @@ class res_partner(models.Model):
 
     @api.multi
     def generate_cust_code(self):
-        #Auto populate customer code
-        customer_code = str(int(time.time()))+'-'+str(int(random()*10))+'-'+'Cust-'+str(self.id)
-        self.write({'customer_code': customer_code})
+        "Auto populate customer code"
+        for partner in self:
+            partner.customer_code = (
+                str(int(time.time())) + '-' +
+                str(int(random()*10)) + '-' +
+                'Cust-'+str(partner.id)
+            )
+        return True
 
     def check_avatax_support(self, avatax_config, country_id):
         """ Checks if address validation pre-condition meets. """
         if avatax_config.address_validation:
             raise UserError(_("The AvaTax Address Validation Service is disabled by the administrator. Please make sure it's enabled for the address validation"))
         if country_id and country_id not in [x.id for x in avatax_config.country_ids] or not country_id:
-            # return False
             raise UserError(_("The AvaTax Address Validation Service does not support this country in the configuration, please continue with your normal process."))
         return True
 
@@ -55,18 +64,17 @@ class res_partner(models.Model):
 
     def get_state_id(self, code, c_code):
         """ Returns the id of the state from the code. """
-        state_obj = self.env['res.country.state']
-        c_id = self.env['res.country'].search([('code', '=', c_code)])[0]
-        s_id = state_obj.search([('code', '=', code), ('country_id', '=', c_id.id)])
+        c_id = self.env['res.country'].search(
+            [('code', '=', c_code)])[0]
+        s_id = self.env['res.country.state'].search(
+            [('code', '=', code), ('country_id', '=', c_id.id)])
         if s_id:
             return s_id[0].id
         return False
 
     def get_country_id(self, code):
         """ Returns the id of the country from the code. """
-
-        country_obj = self.env['res.country']
-        country = country_obj.search([('code', '=', code)])
+        country = self.env['res.country'].search([('code', '=', code)])
         if country:
             return country[0].id
         return False
@@ -91,7 +99,7 @@ class res_partner(models.Model):
             vals['country_id'] = vals.get('country_id') and vals['country_id'][0]
 
             avatax_config_obj = avatax_config_obj = self.env['avalara.salestax']
-            avatax_config = avatax_config_obj._get_avatax_config_company()
+            avatax_config = avatax_config_obj.get_avatax_config_company()
 
             if avatax_config:
                 try:
@@ -103,20 +111,20 @@ class res_partner(models.Model):
                         'state_id': self.get_state_id(valid_address.Region, valid_address.Country),
                         'zip': valid_address.PostalCode,
                         'country_id': self.get_country_id(valid_address.Country),
-                        'latitude': valid_address.Latitude,
-                        'longitude': valid_address.Longitude,
+                        'partner_latitude': valid_address.Latitude,
+                        'partner_longitude': valid_address.Longitude,
                         'date_validation': time.strftime(DEFAULT_SERVER_DATE_FORMAT),
                         'validation_method': 'avatax',
                         'validated_on_save': True
                     })
                     partner.write(vals)
                 except UserError as error:
-                    _logger.warning('couldn\'t validate address for partner %s: %s' % (partner.display_name, error))
+                    _LOGGER.warning('couldn\'t validate address for partner %s: %s' % (partner.display_name, error))
 
         return True
 
     @api.multi
-    def verify_address_validatation(self):
+    def button_avatax_validate_address(self):
         """Method is used to verify of state and country """
         view_ref = self.env.ref('avatax_connector.view_avalara_salestax_address_validate', False)
         address = self.read(['street', 'street2', 'city', 'state_id', 'zip', 'country_id'])[0]
@@ -139,7 +147,7 @@ class res_partner(models.Model):
             'view_id': view_ref.id,
             'res_model': 'avalara.salestax.address.validate',
             'nodestroy': True,
-            'res_id': False,    # assuming the many2one is (mis)named 'teacher'
+            'res_id': False,
             'target': 'new',
             'context': ctx
         }
@@ -149,7 +157,7 @@ class res_partner(models.Model):
         avatax_config_obj = self.env['avalara.salestax']
 
         if not avatax_config:
-            avatax_config = avatax_config_obj._get_avatax_config_company()
+            avatax_config = avatax_config_obj.get_avatax_config_company()
 
         if not avatax_config:
             raise UserError(_("This module has not yet been setup.  Please refer to the Avatax module documentation."))
@@ -158,15 +166,20 @@ class res_partner(models.Model):
         if (not avatax_config.account_number or not avatax_config.license_key or not avatax_config.service_url or not avatax_config.request_timeout):
             raise UserError(_("This module has not yet been setup.  Please refer to the Avatax module documentation."))
 
-        avapoint = AvaTaxService(avatax_config.account_number, avatax_config.license_key,
-                        avatax_config.service_url, avatax_config.request_timeout, avatax_config.logging)
+        avapoint = AvaTaxService(
+            avatax_config.account_number,
+            avatax_config.license_key,
+            avatax_config.service_url,
+            avatax_config.request_timeout,
+            avatax_config.logging)
         addSvc = avapoint.create_address_service().addressSvc
 
         # Obtain the state code & country code and create a BaseAddress Object
         state_code = address.get('state_id') and self.get_state_code(address['state_id'])
         country_code = address.get('country_id') and self.get_country_code(address['country_id'])
-        baseaddress = BaseAddress(addSvc, address.get('street') or None, address.get('street2') or None,
-                         address.get('city'), address.get('zip'), state_code, country_code, 0).data
+        baseaddress = BaseAddress(
+            addSvc, address.get('street') or None, address.get('street2') or None,
+            address.get('city'), address.get('zip'), state_code, country_code, 0).data
         result = avapoint.validate_address(baseaddress, avatax_config.result_in_uppercase and 'Upper' or 'Default')
 
         valid_address = result.ValidAddresses[0][0]
@@ -179,7 +192,7 @@ class res_partner(models.Model):
             if (vals.get('street') or vals.get('street2') or vals.get('zip') or vals.get('city') or \
                 vals.get('country_id') or vals.get('state_id')):
                 avatax_config_obj = self.env['avalara.salestax']
-                avatax_config = avatax_config_obj._get_avatax_config_company()
+                avatax_config = avatax_config_obj.get_avatax_config_company()
 
                 if avatax_config and avatax_config.validation_on_save:
                     brw_address = self.read(['street', 'street2', 'city', 'state_id', 'zip', 'country_id'])[0]
@@ -200,8 +213,8 @@ class res_partner(models.Model):
                             'state_id': self.get_state_id(valid_address.Region, valid_address.Country),
                             'zip': valid_address.PostalCode,
                             'country_id': self.get_country_id(valid_address.Country),
-                            'latitude': valid_address.Latitude,
-                            'longitude': valid_address.Longitude,
+                            'partner_latitude': valid_address.Latitude,
+                            'partner_longitude': valid_address.Longitude,
                             'date_validation': time.strftime(DEFAULT_SERVER_DATE_FORMAT),
                             'validation_method': 'avatax',
                             'validated_on_save': True
@@ -219,7 +232,7 @@ class res_partner(models.Model):
             if (vals.get('street') or vals.get('street2') or vals.get('zip') or vals.get('city') or \
                 vals.get('country_id') or vals.get('state_id')):
                 avatax_config_obj = self.env['avalara.salestax']
-                avatax_config = avatax_config_obj._get_avatax_config_company()
+                avatax_config = avatax_config_obj.get_avatax_config_company()
                 if vals.get('tax_exempt'):
                     if not vals.get('exemption_number') and not vals.get('exemption_code_id'):
                         raise UserError(_("Please enter either Exemption Number or Exemption Code for marking customer as Exempt."))
@@ -228,14 +241,6 @@ class res_partner(models.Model):
                 if avatax_config and avatax_config.validation_on_save:
 
                     if self.check_avatax_support(avatax_config, address.get('country_id')):
-                        # fields_to_read = filter(lambda x: x not in vals, ['street', 'street2', 'city', 'state_id', 'zip', 'country_id'])
-                        # print"self.read(fields_to_read)",self.read(fields_to_read)
-                        # address = fields_to_read and self.read(fields_to_read)[0] or {}
-                        # print"address",address
-                        # address['state_id'] = address.get('state_id') and address['state_id'][0]
-                        # address['country_id'] = address.get('country_id') and address['country_id'][0]
-                        # address.update(vals)
-
                         valid_address = self._validate_address(address, avatax_config)
                         vals.update({
                             'street': valid_address.Line1,
@@ -244,15 +249,15 @@ class res_partner(models.Model):
                             'state_id': self.get_state_id(valid_address.Region, valid_address.Country),
                             'zip': valid_address.PostalCode,
                             'country_id': self.get_country_id(valid_address.Country),
-                            'latitude': valid_address.Latitude,
-                            'longitude': valid_address.Longitude,
+                            'partner_latitude': valid_address.Latitude,
+                            'partner_longitude': valid_address.Longitude,
                             'date_validation': time.strftime(DEFAULT_SERVER_DATE_FORMAT),
                             'validation_method': 'avatax',
                             'validated_on_save': True
                         })
 
         # execute the create
-        cust_id = super(res_partner, self).create(vals)
+        cust_id = super(ResPartner, self).create(vals)
 
         # Generate a detailed customer code based on timestamp, a random number, and it's  ID
         customer_code = str(int(time.time()))+'-'+str(int(random()*10))+'-'+'Cust-'+str(cust_id.id)
@@ -264,8 +269,8 @@ class res_partner(models.Model):
     def write(self, vals):
         if any(address_field in vals for address_field in ADDRESS_FIELDS) and not vals.get('date_validation'):
             vals.update({
-                'latitude': '',
-                'longitude': '',
+                'partner_latitude': '',
+                'partner_longitude': '',
                 'date_validation': False,
                 'validation_method': '',
                 'validated_on_save': False,
@@ -277,9 +282,6 @@ class res_partner(models.Model):
                 raise UserError(_('Please enter either Exemption Number or Exemption Code for marking customer as Exempt.'))
         # Follow the normal write process if it's a write operation from the wizard
         if self.env.context.get('from_validate_button', False):
-            return super(res_partner, self).write(vals)
+            return super(ResPartner, self).write(vals)
         vals1 = self.update_addresses(vals, True)
-        return super(res_partner, self).write(vals1)
-
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:
+        return super(ResPartner, self).write(vals1)
