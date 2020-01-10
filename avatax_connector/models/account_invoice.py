@@ -10,8 +10,9 @@ class AccountInvoice(models.Model):
     @api.onchange('partner_id', 'company_id')
     def _onchange_partner_id(self):
         res = super(AccountInvoice, self)._onchange_partner_id()
-        self.exemption_code = self.partner_id.exemption_number or ''
-        self.exemption_code_id = self.partner_id.exemption_code_id.id or None
+        if not self.env.context.get('skip_exemption'):
+            self.exemption_code = self.partner_id.exemption_number or ''
+            self.exemption_code_id = self.partner_id.exemption_code_id.id or None
         if self.partner_id.validation_method:
             self.is_add_validate = True
         else:
