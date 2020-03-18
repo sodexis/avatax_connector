@@ -10,7 +10,7 @@ class AccountInvoice(models.Model):
     @api.onchange('partner_id', 'company_id')
     def _onchange_partner_id(self):
         res = super(AccountInvoice, self)._onchange_partner_id()
-        if not self.env.context.get('skip_exemption'):
+        if not self.exemption_locked:
             self.exemption_code = self.partner_id.exemption_number or ''
             self.exemption_code_id = self.partner_id.exemption_code_id.id or None
         if self.partner_id.validation_method:
@@ -32,6 +32,9 @@ class AccountInvoice(models.Model):
     is_add_validate = fields.Boolean('Address Is Validated')
     exemption_code = fields.Char('Exemption Number', help="It show the customer exemption number")
     exemption_code_id = fields.Many2one('exemption.code', 'Exemption Code', help="It show the customer exemption code")
+    exemption_locked = fields.Boolean(
+        help="Exemption code won't be automatically changed, "
+        "for instance, when changing the Customer.")
     tax_on_shipping_address = fields.Boolean('Tax based on shipping address', default=True)
     shipping_add_id = fields.Many2one('res.partner', 'Tax Shipping Address', compute='_compute_shipping_add_id')
     shipping_address = fields.Text('Tax Shipping Address Text')

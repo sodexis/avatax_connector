@@ -202,11 +202,11 @@ class AvaTaxService:
         lines.Line = lineslist
         request.Lines = lines
         # And we're ready to make the call
-        #import traceback; traceback.print_stack()  #import pudb; pu.db
+        if self.is_log_enabled:
+            _logger.info(request)
         result = self.get_result(self.taxSvc, self.taxSvc.service.GetTax, request)
         # This helps trace the source of redundant API calls
         if self.is_log_enabled:
-            _logger.info(request)
             _logger.info(result)
         return result
 

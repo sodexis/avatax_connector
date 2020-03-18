@@ -14,9 +14,18 @@ class AccountTax(models.Model):
     is_avatax = fields.Boolean('Is Avatax')
 
     @api.model
-    def _get_compute_tax(self, avatax_config, doc_date, doc_code, doc_type, partner, ship_from_address, shipping_address,
-                         lines, user=None, exemption_number=None, exemption_code_name=None, commit=False, invoice_date=False,
-                         reference_code=False, location_code=False, is_override=False, currency_id=False):
+    def _get_compute_tax(
+            self, avatax_config, doc_date, doc_code, doc_type,
+            partner, ship_from_address, shipping_address,
+            lines, user=None, exemption_number=None,
+            exemption_code_name=None, commit=False, invoice_date=False,
+            reference_code=False, location_code=False,
+            is_override=False, currency_id=False):
+        if False:  # for offline tests only (print pdb pudb)
+            from collections import namedtuple
+            Result = namedtuple('Avatax', 'TotalTax TotalTaxable')
+            return Result(TotalTax=100, TotalTaxable=1000)
+
         currency_code = self.env.user.company_id.currency_id.name
         if currency_id:
             currency_code = currency_id.name
@@ -26,18 +35,22 @@ class AccountTax(models.Model):
                 raise UserError(_(
                     'Customer Code for customer %s not defined.\n\n  '
                     'You can edit the Customer Code in customer profile. '
-                    'You can fix by clicking "Generate Customer Code" button in the customer contact information"'
+                    'You can fix by clicking "Generate Customer Code" button '
+                    'in the customer contact information"'
                     % (partner.name)))
             else:
                 partner.generate_cust_code()
 
         if not shipping_address:
-            raise UserError(_('There is no source shipping address defined for partner %s.') % partner.name)
+            raise UserError(
+                _('There is no source shipping address defined '
+                  'for partner %s.') % partner.name)
 
         if not ship_from_address:
             raise UserError(_('There is no company address defined.'))
 
-        #this condition is required, in case user select force address validation on AvaTax API Configuration
+        # this condition is required, in case user select
+        # force address validation on AvaTax API Configuration
         if not avatax_config.address_validation:
             if avatax_config.force_address_validation:
                 if not shipping_address.date_validation:

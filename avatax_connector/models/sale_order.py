@@ -21,10 +21,10 @@ class SaleOrder(models.Model):
     @api.multi
     def _prepare_invoice(self):
         invoice_vals = super(SaleOrder, self)._prepare_invoice()
-        self.env.context = frozendict(self.env.context, skip_exemption=True)
         invoice_vals.update({
             'exemption_code': self.exemption_code or '',
             'exemption_code_id': self.exemption_code_id.id or False,
+            'exemption_locked': True,
             'location_code': self.location_code or '',
             'warehouse_id': self.warehouse_id.id or '',
             'tax_on_shipping_address': self.tax_on_shipping_address,
