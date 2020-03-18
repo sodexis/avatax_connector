@@ -68,8 +68,6 @@ class SaleOrder(models.Model):
         compute='_compute_tax_id', store=True)
     tax_address = fields.Text('Tax Address Text')
     location_code = fields.Char('Location Code', help='Origin address location code')
-    warehouse_id = fields.Many2one('stock.warehouse', 'Warehouse')
-
 
     @api.model
     def create_lines(self, order_lines):
