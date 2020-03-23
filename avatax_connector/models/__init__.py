@@ -5,5 +5,5 @@ from . import avalara_api
 from . import sale_order
 from . import account_invoice
 from . import account_tax
-
 from . import res_config_settings
+from . import res_company
