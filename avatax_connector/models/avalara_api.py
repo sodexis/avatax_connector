@@ -16,12 +16,14 @@ _logger = logging.getLogger(__name__)
 
 class AvaTaxService:
 
-    def __init__(self, username, password, url, timeout, enable_log=False):
+    def __init__(self, username, password, url, timeout, enable_log=False,
+                 detailed_response=False):
         self.username = username  # This is the company's Development/Production Account number
         self.password = password  # Put in the License Key received from AvaTax
         self.url = url
         self.timeout = timeout
         self.is_log_enabled = enable_log
+        self.detail_level = 'Diagnostic' if detailed_response else 'Document'
 
     def create_tax_service(self):
         self.taxSvc = self.service('tax')
@@ -104,11 +106,21 @@ class AvaTaxService:
                             "AvaTax: Notice\n\n Address Validation for this country not supported. "
                             "But, Avalara will still calculate global tax rules."))
                     else:
-                        raise UserError(_(
-                            'AvaTax: Error: ' + str(w_message._Name) +
-                            "\n\n" "Summary: " + w_message.Summary +
-                            "\n Details: " + str(w_message.Details or '') +
-                            "\n Severity: " + w_message.Severity))
+                        message = _(
+                            "AvaTax: Error: %s"
+                            "\n"
+                            "\n Summary: %s"
+                            "\n Details: %s"
+                            "\n Severity: %s") % (
+                            str(w_message._Name),
+                            w_message.Summary,
+                            str(w_message.Details or ''),
+                            w_message.Severity)
+                        if "Expected Saved|Posted" in str(w_message.Details):
+                            message += _(
+                                "\n\nMaybe this document was already "
+                                "commited to Avatax?")
+                        raise UserError(message)
         else:
             return result
 
@@ -149,8 +161,7 @@ class AvaTaxService:
         lineslist = []
         request = self.taxSvc.factory.create('GetTaxRequest')
         request.Commit = commit
-        request.DetailLevel = 'Diagnostic'
-        # request.DetailLevel = 'Document'
+        request.DetailLevel = self.detail_level
         request.Discount = 0.0
         request.ServiceMode = 'Automatic'  # service mode = Automatic/Local/Remote
         request.PaymentDate = doc_date

@@ -93,7 +93,6 @@ class SaleOrder(models.Model):
                 })
         return lines
 
-    @api.model
     def compute_tax(self):
         """ Create and update tax amount for each and every order line and shipping line.
         @param order_line: send sub_total of each line and get tax amount
@@ -103,9 +102,8 @@ class SaleOrder(models.Model):
             return False
         self = self.with_context(doing_compute_tax=True)
 
-        avatax_config_obj = self.env['avalara.salestax']
         account_tax_obj = self.env['account.tax']
-        avatax_config = avatax_config_obj.get_avatax_config_company()
+        avatax_config = self.company_id.get_avatax_config_company()
 
         # Make sure Avatax is configured
         if not avatax_config:
@@ -160,8 +158,7 @@ class SaleOrder(models.Model):
                         self.name, 'SalesOrder', self.partner_id, ship_from_address_id,
                         shipping_add_id, lines, self.user_id, self.exemption_code or None, self.exemption_code_id.code or None,
                         currency_id=self.currency_id).TotalTax
-                    for o_line in self.order_line:
-                        o_line.write({'tax_amt': 0.0})
+                    self.order_line.write({'tax_amt': 0.0})
                 else:
                     raise UserError(
                         _('Please select system calls in Avatax API Configuration'))
