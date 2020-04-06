@@ -37,6 +37,7 @@ class AvalaraSalestaxAddressValidate(models.TransientModel):
         # Check if there is avatax tax service active for the user company.
         # Prevent validating the address if the address validation is disabled by the administrator.
 
+        # TODO: move config validation to get_avatax_config_company()
         if active_id and active_model == 'res.partner':
             avatax_config = avatax_config_obj.get_avatax_config_company()
             if not avatax_config:

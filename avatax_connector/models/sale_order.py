@@ -174,7 +174,14 @@ class SaleOrder(models.Model):
 
     @api.multi
     def action_confirm(self):
-        res =  super(SaleOrder, self).action_confirm()
+        avatax_config = self.company_id.get_avatax_config_company()
+        if avatax_config and avatax_config.force_address_validation:
+            for addr in [self.partner_id, self.partner_shipping_id]:
+                if not addr.date_validation:
+                    # The Confirm action will be interrupted
+                    # if the address is not validated
+                    return addr.button_avatax_validate_address()
+        res = super(SaleOrder, self).action_confirm()
         self.with_context(avatax_recomputation=True).compute_tax()
         return res
 
