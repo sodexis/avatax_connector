@@ -87,8 +87,17 @@ class AccountInvoice(models.Model):
 
     @api.multi
     def action_invoice_open(self):
-        # We should compute taxes before validating the invoice, to ensure correct account moves
-        # We can only commit to Avatax after validating the invoice, because we need the generated Invoice number
+        avatax_config = self.company_id.get_avatax_config_company()
+        if avatax_config and avatax_config.force_address_validation:
+            for addr in [self.partner_id, self.partner_shipping_id]:
+                if not addr.date_validation:
+                    # The Validate action will be interrupted
+                    # if the address is not validated
+                    return addr.button_avatax_validate_address()
+        # We should compute taxes before validating the invoice
+        # , to ensure correct account moves
+        # We can only commit to Avatax after validating the invoice
+        # , because we need the generated Invoice number
         self.avatax_compute_taxes(commit_avatax=False)
         super(AccountInvoice, self).action_invoice_open()
         self.avatax_compute_taxes(commit_avatax=True)
