@@ -109,7 +109,7 @@ class AccountInvoice(models.Model):
         Extends the standard method reponsible for computing taxes.
         Returns a dict with the taxes values, ready to be use to create tax_line_ids.
         """
-        avatax_config = self.env['avalara.salestax'].get_avatax_config_company()
+        avatax_config = self.company_id.get_avatax_config_company()
         account_tax_obj = self.env['account.tax']
         tax_grouped = {}
         # avatax charges customers per API call, so don't hit their API in every onchange, only when saving
@@ -221,12 +221,11 @@ class AccountInvoice(models.Model):
         Prepare the lines to use for Avatax computation.
         Returns a list of dicts
         """
-        avatax_config_obj = self.env['avalara.salestax']
-        avatax_config = avatax_config_obj.get_avatax_config_company()
         lines = []
         for line in invoice_lines:
             if any(tax.is_avatax for tax in line.invoice_line_tax_ids):
                 # Add UPC to product item code
+                avatax_config = line.company_id.get_avatax_config_company()
                 if line.product_id.barcode and avatax_config.upc_enable:
                     item_code = "upc:" + line.product_id.barcode
                 else:
@@ -276,8 +275,8 @@ class AccountInvoice(models.Model):
     @api.multi
     def action_cancel(self):
         account_tax_obj = self.env['account.tax']
-        avatax_config = self.env['avalara.salestax'].get_avatax_config_company()
         for invoice in self:
+            avatax_config = invoice.company_id.get_avatax_config_company()
             if (invoice.type in ['out_invoice', 'out_refund'] and
                     invoice.partner_id.country_id in avatax_config.country_ids and
                     invoice.state != 'draft'):
@@ -296,7 +295,7 @@ class AccountInvoiceLine(models.Model):
 
     @api.onchange('product_id')
     def _onchange_product_id(self):
-        avatax_config = self.env['avalara.salestax'].get_avatax_config_company()
+        avatax_config = self.company_id.get_avatax_config_company()
         if not avatax_config.disable_tax_calculation:
             if self.invoice_id.type in ('out_invoice', 'out_refund'):
                 taxes = self.product_id.taxes_id or self.account_id.tax_ids
