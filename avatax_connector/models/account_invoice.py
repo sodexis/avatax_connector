@@ -114,7 +114,9 @@ class AccountInvoice(models.Model):
         tax_grouped = {}
         # avatax charges customers per API call, so don't hit their API in every onchange, only when saving
         contact_avatax = contact_avatax or self.env.context.get('contact_avatax') or avatax_config.enable_immediate_calculation
-        if contact_avatax and self.type in ['out_invoice', 'out_refund']:
+        has_avatax = any(x.tax_id.is_avatax for x in self.tax_line_ids)
+        # TODO don't override get_taxes_values()
+        if contact_avatax and self.type in ['out_invoice', 'out_refund'] and has_avatax:
             avatax_id = account_tax_obj.search(
                 [('is_avatax', '=', True),
                  ('type_tax_use', 'in', ['sale', 'all']),
