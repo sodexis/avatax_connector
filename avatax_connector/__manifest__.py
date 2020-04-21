@@ -1,6 +1,6 @@
 {
     "name": "Avalara Avatax Connector",
-    "version": "12.0.2.3.2",
+    "version": "12.0.2.3.3",
     "author": "Fabrice Henrion, Sodexis"
               ", Open Source Integrators",
     "summary": "Sales tax Calculation",
