@@ -49,7 +49,7 @@ class SaleOrder(models.Model):
             })
 
     @api.depends('tax_on_shipping_address', 'partner_id', 'partner_shipping_id')
-    def _compute_tax_id(self):
+    def _compute_tax_add_id(self):
         for invoice in self:
             invoice.tax_add_id = invoice.partner_shipping_id if invoice.tax_on_shipping_address else invoice.partner_id
 
@@ -65,7 +65,7 @@ class SaleOrder(models.Model):
         'res.partner', 'Tax Address',
         readonly=True,
         states={'draft': [('readonly', False)]},
-        compute='_compute_tax_id', store=True)
+        compute='_compute_tax_add_id', store=True)
     tax_address = fields.Text('Tax Address Text')
     location_code = fields.Char('Location Code', help='Origin address location code')
 
