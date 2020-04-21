@@ -182,7 +182,8 @@ class SaleOrder(models.Model):
                     # if the address is not validated
                     return addr.button_avatax_validate_address()
         res = super(SaleOrder, self).action_confirm()
-        self.with_context(avatax_recomputation=True).compute_tax()
+        if avatax_config:
+            self.with_context(avatax_recomputation=True).compute_tax()
         return res
 
 
