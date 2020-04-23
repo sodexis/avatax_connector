@@ -10,7 +10,7 @@ class Company(models.Model):
 
     def get_avatax_config_company(self):
         """ Returns the AvaTax configuration for the Company """
-        if self.company_id:
+        if self:
             self.ensure_one()
             AvataxConfig = self.env['avalara.salestax']
             res = AvataxConfig.search([
