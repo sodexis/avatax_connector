@@ -36,15 +36,17 @@ class SaleOrder(models.Model):
         """
         Compute the total amounts of the SO.
         """
+        super()._amount_all()
         for order in self:
             amount_untaxed = amount_tax = 0.0
             for line in order.order_line:
                 amount_untaxed += line.price_subtotal
                 amount_tax += line.price_tax
             amount_tax += order.tax_amount
+            round_fn = order.pricelist_id.currency_id.round
             order.update({
-                'amount_untaxed': order.pricelist_id.currency_id.round(amount_untaxed),
-                'amount_tax': order.pricelist_id.currency_id.round(amount_tax),
+                'amount_untaxed': round_fn(amount_untaxed),
+                'amount_tax': round_fn(amount_tax),
                 'amount_total': amount_untaxed + amount_tax,
             })
 
