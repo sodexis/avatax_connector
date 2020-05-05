@@ -6,6 +6,7 @@ from odoo.exceptions import UserError
 from odoo.tools import DEFAULT_SERVER_DATE_FORMAT
 from odoo.addons.base.models.res_partner import ADDRESS_FIELDS
 from .avalara_api import AvaTaxService, BaseAddress
+from .avatax_rest_api import AvaTaxRESTService
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -159,29 +160,45 @@ class ResPartner(models.Model):
             avatax_config = company.get_avatax_config_company()
 
         if not avatax_config:
-            raise UserError(_("This module has not yet been setup.  Please refer to the Avatax module documentation."))
+            raise UserError(
+                _("This module has not yet been setup.  Please refer to the Avatax module documentation."))
 
         # Create the AvaTax Address service with the configuration parameters set for the instance
         if (not avatax_config.account_number or not avatax_config.license_key or not avatax_config.service_url or not avatax_config.request_timeout):
-            raise UserError(_("This module has not yet been setup.  Please refer to the Avatax module documentation."))
-
-        avapoint = AvaTaxService(
-            avatax_config.account_number,
-            avatax_config.license_key,
-            avatax_config.service_url,
-            avatax_config.request_timeout,
-            avatax_config.logging)
-        addSvc = avapoint.create_address_service().addressSvc
+            raise UserError(
+                _("This module has not yet been setup.  Please refer to the Avatax module documentation."))
 
         # Obtain the state code & country code and create a BaseAddress Object
-        state_code = address.get('state_id') and self.get_state_code(address['state_id'])
-        country_code = address.get('country_id') and self.get_country_code(address['country_id'])
-        baseaddress = BaseAddress(
-            addSvc, address.get('street') or None, address.get('street2') or None,
-            address.get('city'), address.get('zip'), state_code, country_code, 0).data
-        result = avapoint.validate_address(baseaddress, avatax_config.result_in_uppercase and 'Upper' or 'Default')
+        state_code = address.get(
+            'state_id') and self.get_state_code(address['state_id'])
+        country_code = address.get(
+            'country_id') and self.get_country_code(address['country_id'])
 
-        valid_address = result.ValidAddresses[0][0]
+        if 'rest' in avatax_config.service_url:
+            avatax_restpoint = AvaTaxRESTService(
+                avatax_config.account_number,
+                avatax_config.license_key,
+                avatax_config.service_url,
+                avatax_config.request_timeout,
+                avatax_config.logging)
+            valid_address = avatax_restpoint.validate_rest_address(
+                address, state_code, country_code)
+        else:
+            avapoint = AvaTaxService(
+                avatax_config.account_number,
+                avatax_config.license_key,
+                avatax_config.service_url,
+                avatax_config.request_timeout,
+                avatax_config.logging)
+            addSvc = avapoint.create_address_service().addressSvc
+
+            baseaddress = BaseAddress(
+                addSvc, address.get('street') or None, address.get(
+                    'street2') or None,
+                address.get('city'), address.get('zip'), state_code, country_code, 0).data
+            result = avapoint.validate_address(
+                baseaddress, avatax_config.result_in_uppercase and 'Upper' or 'Default')
+            valid_address = result.ValidAddresses[0][0]
         return valid_address
 
     def update_addresses(self, vals, from_write=False):
