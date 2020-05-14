@@ -171,7 +171,9 @@ class SaleOrder(models.Model):
     @api.multi
     def avalara_compute_taxes(self):
         """ It used to called manually calculation method of avalara and get tax amount"""
-        self.with_context(avatax_recomputation=True).compute_tax()
+        has_avatax_tax = self.mapped('order_line.tax_id.is_avatax')
+        if has_avatax_tax:
+            self.with_context(avatax_recomputation=True).compute_tax()
         return True
 
     @api.multi
@@ -185,7 +187,7 @@ class SaleOrder(models.Model):
                     return addr.button_avatax_validate_address()
         res = super(SaleOrder, self).action_confirm()
         if avatax_config:
-            self.with_context(avatax_recomputation=True).compute_tax()
+            self.avalara_compute_taxes()
         return res
 
 
