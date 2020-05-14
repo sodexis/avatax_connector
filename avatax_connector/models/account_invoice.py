@@ -78,11 +78,16 @@ class AccountInvoice(models.Model):
             # The onchange invoice lines call get_taxes_values()
             # and applies it to the invoice's tax_line_ids
             # invoice.with_context(contact_avatax=True)._onchange_invoice_line_ids()
-            taxes_grouped = invoice.get_taxes_values(contact_avatax=True, commit_avatax=commit_avatax)
-            tax_lines = invoice.tax_line_ids.filtered('manual')
-            for tax in taxes_grouped.values():
-                tax_lines += tax_lines.new(tax)
-            invoice.tax_line_ids = tax_lines
+            has_avatax_tax = invoice.mapped(
+                'invoice_line_ids.invoice_line_tax_ids.is_avatax')
+            if has_avatax_tax:
+                taxes_grouped = invoice.get_taxes_values(
+                    contact_avatax=True,
+                    commit_avatax=commit_avatax)
+                tax_lines = invoice.tax_line_ids.filtered('manual')
+                for tax in taxes_grouped.values():
+                    tax_lines += tax_lines.new(tax)
+                invoice.tax_line_ids = tax_lines
         return True
 
     @api.multi
