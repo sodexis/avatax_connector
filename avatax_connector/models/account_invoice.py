@@ -284,7 +284,10 @@ class AccountInvoice(models.Model):
         account_tax_obj = self.env['account.tax']
         for invoice in self:
             avatax_config = invoice.company_id.get_avatax_config_company()
+            has_avatax_tax = invoice.mapped(
+                'invoice_line_ids.invoice_line_tax_ids.is_avatax')
             if (invoice.type in ['out_invoice', 'out_refund'] and
+                    has_avatax_tax and
                     invoice.partner_id.country_id in avatax_config.country_ids and
                     invoice.state != 'draft'):
                 doc_type = invoice.type == 'out_invoice' and 'SalesInvoice' or 'ReturnInvoice'
