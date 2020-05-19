@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <record id="avatax_sale" model="account.tax">
+            <field name="name">AVT-SALE</field>
+            <field eval="0.0" name="amount"/>
+            <field name="amount_type">percent</field>
+            <field name="is_avatax">True</field>
+        </record>
+
+        <record id="avatax_usetax" model="account.tax">
+            <field name="name">AVT-USE</field>
+            <field eval="0.0" name="amount"/>
+            <field name="amount_type">percent</field>
+            <field name="is_avatax">True</field>
+            <field name="is_expensed_tax">True</field>
+       </record>
+
+  </data>
+</odoo>
