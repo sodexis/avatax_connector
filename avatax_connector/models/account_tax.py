@@ -15,6 +15,37 @@ class AccountTax(models.Model):
     is_avatax = fields.Boolean('Is Avatax')
 
     @api.model
+    def _get_avalara_tax_domain(self, tax_rate, doc_type):
+        return [
+            ("amount", "=", tax_rate),
+            ("is_avatax", "=", True),
+        ]
+
+    @api.model
+    def _get_avalara_tax_name(self, tax_rate, doc_type=None):
+        return _("AVT-Sales {}%").format(str(tax_rate))
+
+    @api.model
+    def get_avalara_tax(self, tax_rate, doc_type):
+        if tax_rate:
+            tax = self.with_context(active_test=False).search(
+                self._get_avalara_tax_domain(tax_rate, doc_type),
+                limit=1)
+            if tax and not tax.active:
+                tax.active = True
+            if not tax:
+                tax_template = self.search(
+                    self._get_avalara_tax_domain(0, doc_type),
+                    limit=1)
+                tax = tax_template.copy(default={
+                    "amount": tax_rate,
+                    })
+                tax.name = self._get_avalara_tax_name(tax_rate, doc_type)
+            return tax
+        else:
+            return self
+
+    @api.model
     def _get_compute_tax(
             self, avatax_config, doc_date, doc_code, doc_type,
             partner, ship_from_address, shipping_address,
@@ -22,10 +53,6 @@ class AccountTax(models.Model):
             exemption_code_name=None, commit=False, invoice_date=False,
             reference_code=False, location_code=False,
             is_override=False, currency_id=False):
-        if False:  # for offline tests only (print pdb pudb)
-            from collections import namedtuple
-            Result = namedtuple('Avatax', 'TotalTax TotalTaxable')
-            return Result(TotalTax=100, TotalTaxable=1000)
 
         currency_code = self.env.user.company_id.currency_id.name
         if currency_id:
@@ -65,17 +92,21 @@ class AccountTax(models.Model):
 
         if avatax_config.disable_tax_calculation:
             _logger.info(
-                'Avatax tax calculation is disabled. Skipping %s %s.', doc_code, doc_type)
+                'Avatax tax calculation is disabled. Skipping %s %s.',
+                doc_code, doc_type)
             return False
 
         if 'rest' in avatax_config.service_url:
+            avataxes = self.env['account.tax']
+            for line in lines:
+                avataxes |= line['tax_id'].filtered('is_avatax')
             avatax_restpoint = AvaTaxRESTService(
                 avatax_config.account_number,
                 avatax_config.license_key,
                 avatax_config.service_url,
                 avatax_config.request_timeout,
                 avatax_config.logging)
-            result = avatax_restpoint.get_tax(
+            tax_result = avatax_restpoint.get_tax(
                 avatax_config.company_code, doc_date, doc_type,
                 partner.customer_code, doc_code, ship_from_address,
                 shipping_address,
@@ -85,6 +116,7 @@ class AccountTax(models.Model):
                 invoice_date, reference_code,
                 location_code, currency_code,
                 partner.vat_id or None, is_override)
+            return tax_result
         else:
             # For check credential
             avalara_obj = AvaTaxService(

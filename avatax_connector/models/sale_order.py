@@ -12,7 +12,7 @@ class SaleOrder(models.Model):
         @param part- update vals with partner exemption number and code,
         also check address validation by avalara
         """
-        res = super(SaleOrder, self).onchange_partner_id()
+        super(SaleOrder, self).onchange_partner_id()
         self.exemption_code = self.partner_id.exemption_number or ''
         self.exemption_code_id = self.partner_id.exemption_code_id.id or None
         self.tax_on_shipping_address = bool(self.partner_shipping_id)
@@ -35,13 +35,13 @@ class SaleOrder(models.Model):
     def _amount_all(self):
         """
         Compute the total amounts of the SO.
+        For SOAP API
         """
         super()._amount_all()
         for order in self:
-            amount_untaxed = amount_tax = 0.0
-            for line in order.order_line:
-                amount_untaxed += line.price_subtotal
-                amount_tax += line.price_tax
+            lines = order.order_line
+            amount_untaxed = sum(line.price_subtotal for line in lines)
+            amount_tax = sum(line.price_tax for line in lines)
             amount_tax += order.tax_amount
             round_fn = order.pricelist_id.currency_id.round
             order.update({
@@ -52,6 +52,9 @@ class SaleOrder(models.Model):
 
     @api.depends('tax_on_shipping_address', 'partner_id', 'partner_shipping_id')
     def _compute_tax_add_id(self):
+        """
+        SOAP API only
+        """
         for invoice in self:
             invoice.tax_add_id = invoice.partner_shipping_id if invoice.tax_on_shipping_address else invoice.partner_id
 
@@ -71,28 +74,26 @@ class SaleOrder(models.Model):
     tax_address = fields.Text('Tax Address Text')
     location_code = fields.Char('Location Code', help='Origin address location code')
 
-    @api.model
-    def create_lines(self, order_lines):
-        """ Tax line creation for calculating tax amount using avalara tax code. """
-        lines = []
-        for line in order_lines:
-            if line.product_id:
-                tax_code = (line.product_id.tax_code_id and line.product_id.tax_code_id.name) or None
-                lines.append({
-                    'qty': line.product_uom_qty,
-                    'itemcode': line.product_id and line.product_id.default_code or None,
-                    'description': line.product_id.description or None,
-                    'amount': line.price_unit * (1-(line.discount or 0.0)/100.0) * line.product_uom_qty,
-                    'tax_code': tax_code,
-                    'id': line,
-                    'tax_id': line.tax_id,
-                })
+    def _get_avatax_doc_type(self, commit=False):
+        return 'SalesOrder'
+
+    def _avatax_prepare_lines(self, doc_type=None):
+        """
+        Prepare the lines to use for Avatax computation.
+        Returns a list of dicts
+        """
+        lines = [
+            line._avatax_prepare_line(sign=1, doc_type=doc_type)
+            for line in self.order_line
+        ]
         return lines
 
     def compute_tax(self):
         """ Create and update tax amount for each and every order line and shipping line.
         @param order_line: send sub_total of each line and get tax amount
         @param shiping_line: send shipping amount of each ship line and get ship tax amount
+
+        SOAP API only
         """
         if self.env.context.get('doing_compute_tax'):
             return False
@@ -125,10 +126,11 @@ class SaleOrder(models.Model):
 
             shipping_add_id = self.tax_add_id
 
-            lines = self.create_lines(self.order_line)
+            lines = self._avatax_prepare_lines()
 
             order_date = self.date_order.date()
             if lines:
+                doc_type = "SalesOrder"
                 if avatax_config.on_line:
                     # Line level tax calculation
                     # tax based on individual order line
@@ -137,22 +139,24 @@ class SaleOrder(models.Model):
                         tax_id = line['tax_id'] and [tax.id for tax in line['tax_id']] or []
                         if ava_tax and ava_tax[0].id not in tax_id:
                             tax_id.append(ava_tax[0].id)
-                        ol_tax_amt = account_tax_obj._get_compute_tax(
+                        tax_result = account_tax_obj._get_compute_tax(
                             avatax_config, order_date,
-                            self.name, 'SalesOrder', self.partner_id, ship_from_address_id,
+                            self.name, doc_type, self.partner_id, ship_from_address_id,
                             shipping_add_id, [line], self.user_id, self.exemption_code or None, self.exemption_code_id.code or None,
-                            currency_id=self.currency_id).TotalTax
+                            currency_id=self.currency_id)
+                        ol_tax_amt = tax_result["tax_amount"]
                         o_tax_amt += ol_tax_amt  # tax amount based on total order line total
                         line['id'].write({'tax_amt': ol_tax_amt, 'tax_id': [(6, 0, tax_id)]})
 
                     tax_amount = o_tax_amt
 
                 elif avatax_config.on_order:
-                    tax_amount = account_tax_obj._get_compute_tax(
+                    tax_result = account_tax_obj._get_compute_tax(
                         avatax_config, order_date,
-                        self.name, 'SalesOrder', self.partner_id, ship_from_address_id,
+                        self.name, doc_type, self.partner_id, ship_from_address_id,
                         shipping_add_id, lines, self.user_id, self.exemption_code or None, self.exemption_code_id.code or None,
-                        currency_id=self.currency_id).TotalTax
+                        currency_id=self.currency_id)
+                    tax_amount = tax_result["tax_amount"]
 
                     for o_line in self.order_line:
                         o_line.write({'tax_amt': 0.0})
@@ -168,16 +172,67 @@ class SaleOrder(models.Model):
         self.write({'tax_amount': tax_amount, 'order_line': []})
         return True
 
+    def _avatax_compute_tax(self):
+        """ Contact REST API and recompute taxes for a Sale Order """
+        self and self.ensure_one()
+        doc_type = self._get_avatax_doc_type()
+        Tax = self.env['account.tax']
+        avatax_config = self.company_id.get_avatax_config_company()
+        taxable_lines = self._avatax_prepare_lines(self.order_line)
+        tax_result = Tax._get_compute_tax(
+            avatax_config,
+            self.date_order,
+            self.name,
+            doc_type,
+            self.partner_id,
+            self.warehouse_id.partner_id or self.company_id.partner_id,
+            self.partner_shipping_id or self.partner_id,
+            taxable_lines,
+            self.user_id,
+            self.exemption_code or None,
+            self.exemption_code_id.code or None,
+            currency_id=self.currency_id)
+        tax_result_lines = {
+            int(x["lineNumber"]): x for x in tax_result["lines"]}
+        for line in self.order_line:
+            tax_result_line = tax_result_lines.get(line.id)
+            if tax_result_line:
+                # Should we check the rate with the tax amount?
+                # tax_amount = tax_result_line["taxCalculated"]
+                # rate = round(tax_amount / line.price_subtotal * 100, 2)
+                rate = round(
+                    sum(x["rate"] for x in tax_result_line["details"]) * 100,
+                    4)
+                tax = Tax.get_avalara_tax(rate, doc_type)
+                # TODO: ...
+                # line_avataxes = line.invoice_line_tax_ids.filtered("is_avatax")
+                # line_tax_rate = line.invoice_line_tax_ids.mapped("amount")
+                if tax not in line.tax_id:
+                    line_taxes = line.tax_id.filtered(
+                        lambda x: not x.is_avatax or x.amount == 0)
+                    line.tax_id = line_taxes | tax
+        return True
+
     @api.multi
     def avalara_compute_taxes(self):
-        """ It used to called manually calculation method of avalara and get tax amount"""
+        """
+        It used to called manually calculation method of Avalara
+        and get tax amount
+        """
+        self and self.ensure_one()
         has_avatax_tax = self.mapped('order_line.tax_id.is_avatax')
-        if has_avatax_tax:
+        avatax_config = self.company_id.get_avatax_config_company()
+        if not has_avatax_tax:
+            self.write({'tax_amount': 0})
+        elif 'rest' in avatax_config.service_url:
+            self._avatax_compute_tax()
+        else:
             self.with_context(avatax_recomputation=True).compute_tax()
         return True
 
     @api.multi
     def action_confirm(self):
+        self and self.ensure_one()
         avatax_config = self.company_id.get_avatax_config_company()
         if avatax_config and avatax_config.force_address_validation:
             for addr in [self.partner_id, self.partner_shipping_id]:
@@ -194,3 +249,48 @@ class SaleOrder(models.Model):
 class SaleOrderLine(models.Model):
     _inherit = "sale.order.line"
     tax_amt = fields.Float('Avalara Tax', help="tax calculate by avalara")
+
+    def _avatax_prepare_line(self, sign=1, doc_type=None):
+        """
+        Prepare a line to use for Avatax computation.
+        Returns a dict
+        """
+        line = self
+        res = {}
+        if line.tax_id.filtered("is_avatax"):
+            # Add UPC to product item code
+            avatax_config = line.company_id.get_avatax_config_company()
+            if line.product_id.barcode and avatax_config.upc_enable:
+                item_code = "upc:" + line.product_id.barcode
+            else:
+                item_code = line.product_id.default_code
+            tax_code = (
+                line.product_id.tax_code_id.name or
+                line.product_id.categ_id.tax_code_id.name)
+            amount = (
+                sign *
+                line.price_unit *
+                line.product_uom_qty *
+                (1 - line.discount) / 100.0)
+            # Calculate discount amount
+            discount_amount = 0.0
+            is_discounted = False
+            if line.discount:
+                discount_amount = (
+                    sign *
+                    line.price_unit *
+                    line.product_uom_qty *
+                    line.discount / 100.0)
+                is_discounted = True
+            res = {
+                'qty': line.product_uom_qty,
+                'itemcode': line.product_id and item_code or None,
+                'description': line.name,
+                'discounted': is_discounted,
+                'discount': discount_amount,
+                'amount': amount,
+                'tax_code': tax_code,
+                'id': line,
+                'tax_id': line.tax_id,
+            }
+        return res

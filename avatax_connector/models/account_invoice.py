@@ -68,6 +68,77 @@ class AccountInvoice(models.Model):
         # else:
         return False
 
+    def _get_avatax_doc_type(self, commit=False):
+        self.ensure_one()
+        if self.type == "out_refund":
+            doc_type = 'ReturnInvoice'
+        elif commit:
+            doc_type = 'SalesInvoice'
+        else:
+            doc_type = 'SalesOrder'
+        return doc_type
+
+    def _avatax_prepare_lines(self, doc_type=None):
+        """
+        Prepare the lines to use for Avatax computation.
+        Returns a list of dicts
+        """
+        sign = self.type == 'out_invoice' and 1 or -1
+        lines = [
+            line._avatax_prepare_line(sign, doc_type)
+            for line in self.invoice_line_ids
+        ]
+        return lines
+
+    def _avatax_compute_tax(self, commit=False):
+        """ Contact REST API and recompute taxes for a Sale Order """
+        self and self.ensure_one()
+        Tax = self.env['account.tax']
+        avatax_config = self.company_id.get_avatax_config_company()
+        commit = commit and not avatax_config.disable_tax_reporting
+        doc_type = self._get_avatax_doc_type(commit)
+        tax_date = self.get_origin_tax_date() or self.date_invoice
+        taxable_lines = self._avatax_prepare_lines(doc_type)
+        tax_result = Tax._get_compute_tax(
+            avatax_config,
+            self.date_invoice or fields.Date.today(),
+            self.number,
+            doc_type,
+            self.partner_id,
+            self.warehouse_id.partner_id or self.company_id.partner_id,
+            self.partner_shipping_id or self.partner_id,
+            taxable_lines,
+            self.user_id,
+            self.exemption_code or None,
+            self.exemption_code_id.code or None,
+            commit,
+            tax_date,
+            self.invoice_doc_no,
+            self.location_code or '',
+            is_override=self.type == 'out_refund',
+            currency_id=self.currency_id)
+
+        tax_result_lines = {
+            int(x["lineNumber"]): x for x in tax_result["lines"]}
+        for line in self.invoice_line_ids:
+            tax_result_line = tax_result_lines.get(line.id)
+            if tax_result_line:
+                # Should we check the rate with the tax amount?
+                # tax_amount = tax_result_line["taxCalculated"]
+                # rate = round(tax_amount / line.price_subtotal * 100, 2)
+                rate = round(
+                    sum(x["rate"] for x in tax_result_line["details"]) * 100,
+                    4)
+                tax = Tax.get_avalara_tax(rate, doc_type)
+                # TODO: ...
+                # line_avataxes = line.invoice_line_tax_ids.filtered("is_avatax")
+                # line_tax_rate = line.invoice_line_tax_ids.mapped("amount")
+                if tax not in line.invoice_line_tax_ids:
+                    line_taxes = line.invoice_line_tax_ids.filtered(
+                        lambda x: not x.is_avatax or x.amount == 0)
+                    line.invoice_line_tax_ids = line_taxes | tax
+        return True
+
     @api.multi
     def avatax_compute_taxes(self, commit_avatax=False):
         """
@@ -81,13 +152,18 @@ class AccountInvoice(models.Model):
             has_avatax_tax = invoice.mapped(
                 'invoice_line_ids.invoice_line_tax_ids.is_avatax')
             if has_avatax_tax:
-                taxes_grouped = invoice.get_taxes_values(
-                    contact_avatax=True,
-                    commit_avatax=commit_avatax)
-                tax_lines = invoice.tax_line_ids.filtered('manual')
-                for tax in taxes_grouped.values():
-                    tax_lines += tax_lines.new(tax)
-                invoice.tax_line_ids = tax_lines
+                avatax_config = self.company_id.get_avatax_config_company()
+                if 'rest' in avatax_config.service_url:
+                    invoice._avatax_compute_tax(commit=commit_avatax)
+                    invoice._onchange_invoice_line_ids()
+                else:
+                    taxes_grouped = invoice.get_taxes_values(
+                        contact_avatax=True,
+                        commit_avatax=commit_avatax)
+                    tax_lines = invoice.tax_line_ids.filtered('manual')
+                    for tax in taxes_grouped.values():
+                        tax_lines += tax_lines.new(tax)
+                    invoice.tax_line_ids = tax_lines
         return True
 
     @api.multi
@@ -113,6 +189,7 @@ class AccountInvoice(models.Model):
         """
         Extends the standard method reponsible for computing taxes.
         Returns a dict with the taxes values, ready to be use to create tax_line_ids.
+        Used for SOAP API only.
         """
         avatax_config = self.company_id.get_avatax_config_company()
         account_tax_obj = self.env['account.tax']
@@ -137,7 +214,7 @@ class AccountInvoice(models.Model):
             tax_date = self.get_origin_tax_date() or self.date_invoice
 
             sign = self.type == 'out_invoice' and 1 or -1
-            lines = self.create_lines(self.invoice_line_ids, sign)
+            lines = self._avatax_prepare_lines()
             if lines:
                 ship_from_address_id = self.warehouse_id.partner_id or self.company_id.partner_id
                 o_tax_amt = 0.0
@@ -149,7 +226,7 @@ class AccountInvoice(models.Model):
                 else:
                     doc_type = 'SalesOrder'
 
-                o_tax = account_tax_obj._get_compute_tax(
+                tax_result = account_tax_obj._get_compute_tax(
                     avatax_config, self.date_invoice or time.strftime('%Y-%m-%d'),
                     self.number,
                     doc_type,  #'SalesOrder',
@@ -159,13 +236,14 @@ class AccountInvoice(models.Model):
                     commit, tax_date,
                     self.invoice_doc_no, self.location_code or '',
                     is_override=self.type == 'out_refund', currency_id=self.currency_id)
+                o_tax = tax_result["tax_amount"]
 
                 if o_tax:
                     val = {
                         'invoice_id': self.id,
                         'name': tax[0].name,
                         'tax_id': tax[0].id,
-                        'amount': float(o_tax.TotalTax) * sign,
+                        'amount': float(o_tax) * sign,
                         'base': 0, #float(o_tax.TotalTaxable),
                         'manual': False,
                         'sequence': tax[0].sequence,
@@ -223,48 +301,6 @@ class AccountInvoice(models.Model):
         return tax_grouped
 
     @api.model
-    def create_lines(self, invoice_lines, sign=1):
-        """
-        Prepare the lines to use for Avatax computation.
-        Returns a list of dicts
-        """
-        lines = []
-        for line in invoice_lines:
-            if any(tax.is_avatax for tax in line.invoice_line_tax_ids):
-                # Add UPC to product item code
-                avatax_config = line.company_id.get_avatax_config_company()
-                if line.product_id.barcode and avatax_config.upc_enable:
-                    item_code = "upc:" + line.product_id.barcode
-                else:
-                    item_code = line.product_id.default_code
-                # Get Tax Code
-                #if line.product_id:
-                tax_code = (line.product_id.tax_code_id and line.product_id.tax_code_id.name) or None
-                # else:
-                #    tax_code = (line.product_id.categ_id.tax_code_id  and line.product_id.categ_id.tax_code_id.name) or None
-                # Calculate discount amount
-                discount_amount = 0.0
-                is_discounted = False
-                if line.discount != 0.0 or line.discount != None:
-                    discount_amount = sign * line.price_unit * ((line.discount or 0.0)/100.0) * line.quantity,
-                    is_discounted = True
-                lines.append({
-                    'qty': line.quantity,
-                    'itemcode': line.product_id and item_code or None,
-                    'description': line.name,
-                    'discounted': is_discounted,
-                    'discount': discount_amount[0],
-                    'amount': sign * line.price_unit * (1-(line.discount or 0.0)/100.0) * line.quantity,
-                    'tax_code': tax_code,
-                    'id': line,
-                    'account_analytic_id': line.account_analytic_id.id,
-                    'analytic_tag_ids': line.analytic_tag_ids.ids,
-                    'account_id': line.account_id.id,
-                    'tax_id': line.invoice_line_tax_ids,
-                })
-        return lines
-
-    @api.model
     def _prepare_refund(self, invoice, date_invoice=None, date=None, description=None, journal_id=None):
         values = super(AccountInvoice, self)._prepare_refund(invoice, date_invoice=date_invoice, date=date, description=description, journal_id=journal_id)
         values.update({
@@ -319,3 +355,51 @@ class AccountInvoiceLine(models.Model):
                 }
                 return {'warning': warning}
         return super(AccountInvoiceLine, self)._onchange_product_id()
+
+    def _avatax_prepare_line(self, sign=1, doc_type=None):
+        """
+        Prepare a line to use for Avatax computation.
+        Returns a dict
+        """
+        line = self
+        res = {}
+        if line.invoice_line_tax_ids.filtered("is_avatax"):
+            # Add UPC to product item code
+            avatax_config = line.company_id.get_avatax_config_company()
+            if line.product_id.barcode and avatax_config.upc_enable:
+                item_code = "upc:" + line.product_id.barcode
+            else:
+                item_code = line.product_id.default_code
+            tax_code = (
+                line.product_id.tax_code_id.name or
+                line.product_id.categ_id.tax_code_id.name)
+            amount = (
+                sign *
+                line.price_unit *
+                line.quantity *
+                (1 - line.discount) / 100.0)
+            # Calculate discount amount
+            discount_amount = 0.0
+            is_discounted = False
+            if line.discount:
+                discount_amount = (
+                    sign *
+                    line.price_unit *
+                    line.quantity *
+                    line.discount / 100.0)
+                is_discounted = True
+            res = {
+                'qty': line.quantity,
+                'itemcode': line.product_id and item_code or None,
+                'description': line.name,
+                'discounted': is_discounted,
+                'discount': discount_amount,
+                'amount': amount,
+                'tax_code': tax_code,
+                'id': line,
+                'account_analytic_id': line.account_analytic_id.id,
+                'analytic_tag_ids': line.analytic_tag_ids.ids,
+                'account_id': line.account_id.id,
+                'tax_id': line.invoice_line_tax_ids,
+            }
+        return res
