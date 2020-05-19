@@ -272,7 +272,7 @@ class AvaTaxRESTService:
         result = self.get_result(response)
         # This helps trace the source of redundant API calls
         if self.is_log_enabled:
-            _logger.info(pprint.pformat("\n" + result, indent=1))
+            _logger.info("\n" + pprint.pformat(result, indent=1))
         Taxvalue = collections.namedtuple("Taxvalue", ["TotalTax"])
         tax_result = Taxvalue(TotalTax=result.get("totalTax"))
         return tax_result
