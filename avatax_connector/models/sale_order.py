@@ -344,8 +344,7 @@ class SaleOrderLine(models.Model):
                 sign
                 * line.price_unit
                 * line.product_uom_qty
-                * (1 - line.discount)
-                / 100.0
+                * (1 - line.discount / 100.0)
             )
             # Calculate discount amount
             discount_amount = 0.0

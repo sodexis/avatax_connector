@@ -454,7 +454,7 @@ class AccountInvoiceLine(models.Model):
                 or line.product_id.categ_id.tax_code_id.name
             )
             amount = (
-                sign * line.price_unit * line.quantity * (1 - line.discount) / 100.0
+                sign * line.price_unit * line.quantity * (1 - line.discount / 100.0)
             )
             # Calculate discount amount
             discount_amount = 0.0
