@@ -281,7 +281,7 @@ class AccountInvoice(models.Model):
                     is_override=self.type == "out_refund",
                     currency_id=self.currency_id,
                 )
-                o_tax = tax_result["tax_amount"]
+                o_tax = tax_result.TotalTax
 
                 if o_tax:
                     val = {

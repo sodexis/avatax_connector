@@ -200,7 +200,7 @@ class SaleOrder(models.Model):
                             self.exemption_code_id.code or None,
                             currency_id=self.currency_id,
                         )
-                        ol_tax_amt = tax_result["tax_amount"]
+                        ol_tax_amt = tax_result.TotalTax
                         o_tax_amt += (
                             ol_tax_amt  # tax amount based on total order line total
                         )
@@ -225,7 +225,7 @@ class SaleOrder(models.Model):
                         self.exemption_code_id.code or None,
                         currency_id=self.currency_id,
                     )
-                    tax_amount = tax_result["tax_amount"]
+                    tax_amount = tax_result.TotalTax
 
                     for o_line in self.order_line:
                         o_line.write({"tax_amt": 0.0})
