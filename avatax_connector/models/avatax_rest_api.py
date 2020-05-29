@@ -148,7 +148,7 @@ class AvaTaxRESTService:
             Line1=addresses_dict.get("line1"),
             Line2=addresses_dict.get("line2"),
             City=addresses_dict.get("city"),
-            PostalCode=addresses_dict.get("city"),
+            PostalCode=addresses_dict.get("postalCode"),
             Country=addresses_dict.get("country"),
             Region=addresses_dict.get("region"),
             Latitude=addresses_dict.get("latitude"),
