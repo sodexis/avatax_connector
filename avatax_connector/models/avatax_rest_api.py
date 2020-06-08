@@ -189,7 +189,6 @@ class AvaTaxRESTService:
             )
         else:
             _logger.info("GetTaxRequest for document %s (type: %s)", doc_code, doc_type)
-        lineslist = []
         if not origin.street:
             raise UserError(
                 _(
@@ -201,17 +200,17 @@ class AvaTaxRESTService:
                     "and validate the address. Save partner update when done."
                 )
             )
-        for line in received_lines:
-            desc = line.get("description", None)
-            line_dict = {
+
+        lineslist = [
+            {
                 "amount": line.get("amount", 0.0),
-                "description": tools.ustr(desc)[:255],
+                "description": tools.ustr(line.get("description", ""))[:255],
                 "itemCode": line.get("itemcode", None),
                 "number": line["id"].id,
                 "quantity": line.get("qty", 1),
                 "taxCode": line.get("tax_code", None),
-            }
-            lineslist.append(line_dict)
+            } for line in received_lines if line
+        ]
 
         if doc_date and type(doc_date) != str:
             doc_date = fields.Date.to_string(doc_date)
