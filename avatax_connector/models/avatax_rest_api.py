@@ -9,6 +9,7 @@ except Exception:
     pass
 import logging
 import pprint
+from requests import status_codes
 
 from odoo import fields, tools, _
 from odoo.exceptions import UserError
@@ -43,18 +44,33 @@ class AvaTaxRESTService:
         if username and password:
             self.client.add_credentials(username, password)
 
-    def get_result(self, response):
+    def _sanitize_text(self, text):
+        res = (
+            text.replace("/", "_-ava2f-_")
+            .replace("+", "_-ava2b-_")
+            .replace("?", "_-ava3f-_")
+            .replace(" ", "%20")
+        )
+        return res
+
+    def get_result(self, response, ignore_error=None):
         # To call from validate address and from compute tax
-        result = response.json()
+        if not response.text:
+            raise UserError(
+                _("No response message found.\n%s %s.") % (
+                    response.status_code,
+                    status_codes._codes[response.status_code][0]
+                )
+            )
+        result = response.json() if response.text else {}
         if self.is_log_enabled:
-            _logger.info(pprint.pformat(result, indent=1))
+            _logger.info("Response\n" + pprint.pformat(result, indent=1))
         if result.get("messages") or result.get("error"):
-            if result.get("messages"):
-                result = result.get("messages")
-            elif result.get("error"):
-                result = result.get("error").get("details")
-            for w_message in result:
-                if w_message.get("severity") == "Error":
+            messages = result.get("messages") or result.get("error", {}).get("details")
+            if ignore_error and messages and messages[0].get("number") == ignore_error:
+                return messages[0]
+            for w_message in messages:
+                if w_message.get("severity") in ("Error", "Exception"):
                     if (
                         w_message.get("refersTo") == "Address"
                         or w_message.get("refersTo") == "Address.Line0"
@@ -107,8 +123,7 @@ class AvaTaxRESTService:
                             )
                         message += "\n Severity: " + str(w_message.get("severity"))
                         raise UserError(_(message))
-        else:
-            return result
+        return result
 
     def ping(self):
         response = self.client.ping()
@@ -176,6 +191,7 @@ class AvaTaxRESTService:
         currency_code="USD",
         vat_id=None,
         is_override=False,
+        ignore_error=None,
     ):
         """ Create tax request and get tax amount by customer address
             @currency_code : 'USD' is the default currency code for avalara,
@@ -183,12 +199,6 @@ class AvaTaxRESTService:
             return information about how the tax was calculated.  Intended
             for use only while the SDK is in a development environment.
         """
-        if commit:
-            _logger.info(
-                "GetTaxrequest committing document %s (type: %s)", doc_code, doc_type
-            )
-        else:
-            _logger.info("GetTaxRequest for document %s (type: %s)", doc_code, doc_type)
         if not origin.street:
             raise UserError(
                 _(
@@ -238,17 +248,21 @@ class AvaTaxRESTService:
                     "region": destination.state_id.code or None,
                 },
             },
-            "commit": commit,
+            "lines": lineslist,
             # 'purchaseOrderNo": "2020-02-05-001"
             "companyCode": company_code,
             "currencyCode": currency_code,
             "customerCode": partner_code,
+            "referenceCode": reference_code,
+            "salespersonCode": salesman_code,
+            "reportingLocationCode": location_code,
+            "entityUseCode": customer_usage_type,
+            "exemptionNo": exemption_no,
+            "description": doc_code or "Draft",
             "date": doc_date,
             "code": doc_code,
-            "referenceCode": doc_code,
-            "description": doc_code or "Draft",
-            "lines": lineslist,
             "type": doc_type,
+            "commit": commit,
         }
         if is_override and invoice_date:
             tax_document.update(
@@ -262,14 +276,46 @@ class AvaTaxRESTService:
                 }
             )
         if self.is_log_enabled:
-            _logger.info("\n" + pprint.pformat(tax_document, indent=1))
+            _logger.info(
+                "Request CreateTransaction %s %s (commit %s)\n%s",
+                doc_type,
+                doc_code,
+                commit,
+                pprint.pformat(tax_document, indent=1),
+            )
+
         response = self.client.create_transaction(tax_document)
-        result = self.get_result(response)
-        # This helps trace the source of redundant API calls
-        if self.is_log_enabled:
-            _logger.info("\n" + pprint.pformat(result, indent=1))
+        result = self.get_result(response, ignore_error=ignore_error)
+        # Enrich Avatax result with Odoo tax computation
+        for line in result.get("lines", []):
+            line["rate"] = (
+                round(sum(x["rate"] for x in line["details"]) * 100, 4)
+                if line.get("tax")
+                else 0.0
+            )
         return result
 
+    def call(self, endpoint, company_code, doc_code, model=None, params=None):
+        if self.is_log_enabled:
+            _logger.info(
+                "Request Call %s(%s, %s, %s, %s)",
+                endpoint,
+                company_code,
+                doc_code,
+                model,
+                params,
+            )
+        company_code = self._sanitize_text(company_code)
+        doc_code = self._sanitize_text(doc_code)
+        endpoint_method = getattr(self.client, endpoint)
+        if params:
+            response = endpoint_method(company_code, doc_code, model, params)
+        else:
+            response = endpoint_method(company_code, doc_code, model)
+        result = self.get_result(response)
+        return result
+
+    # FIXME: deprecated
     def cancel_tax(self, company_code, doc_code, doc_type, cancel_code):
         tax_data = {
             "code": cancel_code,

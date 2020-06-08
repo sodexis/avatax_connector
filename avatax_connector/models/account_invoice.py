@@ -91,12 +91,12 @@ class AccountInvoice(models.Model):
 
     def _get_avatax_doc_type(self, commit=False):
         self.ensure_one()
-        if self.type == "out_refund":
-            doc_type = "ReturnInvoice"
-        elif commit:
-            doc_type = "SalesInvoice"
-        else:
+        if not commit:
             doc_type = "SalesOrder"
+        elif self.type == "out_refund":
+            doc_type = "ReturnInvoice"
+        else:
+            doc_type = "SalesInvoice"
         return doc_type
 
     def _avatax_prepare_lines(self, doc_type=None):
@@ -119,8 +119,7 @@ class AccountInvoice(models.Model):
         doc_type = self._get_avatax_doc_type(commit)
         tax_date = self.get_origin_tax_date() or self.date_invoice
         taxable_lines = self._avatax_prepare_lines(doc_type)
-        tax_result = Tax._get_compute_tax(
-            avatax_config,
+        tax_result = avatax_config.create_transaction(
             self.date_invoice or fields.Date.today(),
             self.number,
             doc_type,
@@ -137,7 +136,14 @@ class AccountInvoice(models.Model):
             self.location_code or "",
             is_override=self.type == "out_refund",
             currency_id=self.currency_id,
+            ignore_error=300 if commit else None,
         )
+        # If commiting, and document exists, try unvoiding it
+        # Error number 300 = GetTaxError, Expected Saved|Posted
+        if commit and tax_result.get("number") == 300:
+            avatax_config.unvoid_transaction(self.number, doc_type)
+            avatax_config.commit_transaction(self.number, doc_type)
+            return True
 
         tax_result_lines = {int(x["lineNumber"]): x for x in tax_result["lines"]}
         for line in self.invoice_line_ids:
@@ -262,11 +268,11 @@ class AccountInvoice(models.Model):
                 else:
                     doc_type = "SalesOrder"
 
-                tax_result = account_tax_obj._get_compute_tax(
+                tax_result = account_tax_obj._get_compute_tax(  # SOAP
                     avatax_config,
                     self.date_invoice or time.strftime("%Y-%m-%d"),
                     self.number,
-                    doc_type,  #'SalesOrder',
+                    doc_type,  # 'SalesOrder',
                     self.partner_id,
                     ship_from_address_id,
                     self.shipping_add_id,
@@ -392,7 +398,6 @@ class AccountInvoice(models.Model):
 
     @api.multi
     def action_cancel(self):
-        account_tax_obj = self.env["account.tax"]
         for invoice in self:
             avatax_config = invoice.company_id.get_avatax_config_company()
             has_avatax_tax = invoice.mapped(
@@ -404,12 +409,8 @@ class AccountInvoice(models.Model):
                 and invoice.partner_id.country_id in avatax_config.country_ids
                 and invoice.state != "draft"
             ):
-                doc_type = (
-                    invoice.type == "out_invoice" and "SalesInvoice" or "ReturnInvoice"
-                )
-                account_tax_obj.cancel_tax(
-                    avatax_config, invoice.number, doc_type, "DocVoided"
-                )
+                doc_type = invoice._get_avatax_doc_type(commit=True)
+                avatax_config.void_transaction(invoice.number, doc_type)
         return super(AccountInvoice, self).action_cancel()
 
 

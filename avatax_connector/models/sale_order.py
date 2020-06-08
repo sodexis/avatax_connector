@@ -186,7 +186,7 @@ class SaleOrder(models.Model):
                         )
                         if ava_tax and ava_tax[0].id not in tax_id:
                             tax_id.append(ava_tax[0].id)
-                        tax_result = account_tax_obj._get_compute_tax(
+                        tax_result = account_tax_obj._get_compute_tax(  # SOAP
                             avatax_config,
                             order_date,
                             self.name,
@@ -211,7 +211,7 @@ class SaleOrder(models.Model):
                     tax_amount = o_tax_amt
 
                 elif avatax_config.on_order:
-                    tax_result = account_tax_obj._get_compute_tax(
+                    tax_result = account_tax_obj._get_compute_tax(  # SOAP
                         avatax_config,
                         order_date,
                         self.name,
@@ -250,8 +250,7 @@ class SaleOrder(models.Model):
         Tax = self.env["account.tax"]
         avatax_config = self.company_id.get_avatax_config_company()
         taxable_lines = self._avatax_prepare_lines(self.order_line)
-        tax_result = Tax._get_compute_tax(
-            avatax_config,
+        tax_result = avatax_config.create_transaction(
             self.date_order,
             self.name,
             doc_type,
