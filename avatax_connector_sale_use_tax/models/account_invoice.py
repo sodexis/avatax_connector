@@ -23,7 +23,7 @@ class AccountInvoiceLine(models.Model):
 
     def _avatax_prepare_line(self, sign=1, doc_type=None):
         res = super()._avatax_prepare_line(sign=sign, doc_type=doc_type)
-        if "Purchase" in doc_type:
+        if doc_type and "Purchase" in doc_type:
             unit_cost = self.product_id.standard_price
             amount = sign * unit_cost * self.quantity
             res.update({
