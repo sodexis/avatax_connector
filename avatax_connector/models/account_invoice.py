@@ -236,7 +236,8 @@ class AccountInvoice(models.Model):
                     ("is_avatax", "=", True),
                     ("type_tax_use", "in", ["sale", "all"]),
                     ("company_id", "=", self.company_id.id),
-                ]
+                ],
+                limit=1
             )
             if not avatax_id:
                 raise UserError(
