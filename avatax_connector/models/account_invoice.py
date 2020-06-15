@@ -152,9 +152,7 @@ class AccountInvoice(models.Model):
                 # Should we check the rate with the tax amount?
                 # tax_amount = tax_result_line["taxCalculated"]
                 # rate = round(tax_amount / line.price_subtotal * 100, 2)
-                rate = round(
-                    sum(x["rate"] for x in tax_result_line["details"]) * 100, 4
-                )
+                rate = tax_result_line.get("rate", 0.0)
                 tax = Tax.get_avalara_tax(rate, doc_type)
                 # TODO: ...
                 # line_avataxes = line.invoice_line_tax_ids.filtered("is_avatax")
