@@ -107,6 +107,7 @@ class AccountInvoice(models.Model):
         sign = self.type == "out_invoice" and 1 or -1
         lines = [
             line._avatax_prepare_line(sign, doc_type) for line in self.invoice_line_ids
+            if line.price_subtotal
         ]
         return lines
 
