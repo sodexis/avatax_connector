@@ -1,5 +1,6 @@
 import time
 from odoo import api, fields, models, _
+import odoo.addons.decimal_precision as dp
 from odoo.exceptions import UserError
 
 
@@ -58,6 +59,25 @@ class AccountInvoice(models.Model):
     )
     warehouse_id = fields.Many2one("stock.warehouse", "Warehouse")
     disable_tax_calculation = fields.Boolean("Disable Avatax Tax calculation")
+    avatax_amount = fields.Float(
+        "Tax Code Amount",
+        digits=dp.get_precision("Sale Price")
+    )
+
+    @api.depends(
+        'invoice_line_ids.price_subtotal', 'tax_line_ids.amount',
+        'tax_line_ids.amount_rounding', 'currency_id', 'company_id',
+        'date_invoice', 'type',
+        'avatax_amount'
+    )
+    def _compute_amount(self):
+        super()._compute_amount()
+        for inv in self:
+            if inv.avatax_amount:
+                inv.amount_tax = inv.avatax_amount
+                inv.amount_total = inv.amount_untaxed + inv.amount_tax
+                sign = self.type in ['in_refund', 'out_refund'] and -1 or 1
+                inv.amount_total_signed = inv.amount_total * sign
 
     @api.multi
     @api.depends("tax_on_shipping_address", "partner_id", "partner_shipping_id")
@@ -68,6 +88,16 @@ class AccountInvoice(models.Model):
                 if invoice.tax_on_shipping_address
                 else invoice.partner_id
             )
+
+    @api.onchange('invoice_line_ids')
+    def onchange_reset_avatax_amount(self):
+        """
+        When changing quantities or prices, reset the Avatax computed amount.
+        The Odoo computed tax amount will then be shown, as a reference.
+        The Avatax amount will be recomputed upon document validation.
+        """
+        for inv in self:
+            inv.avatax_amount = 0
 
     @api.multi
     def get_origin_tax_date(self):
@@ -150,19 +180,15 @@ class AccountInvoice(models.Model):
         for line in self.invoice_line_ids:
             tax_result_line = tax_result_lines.get(line.id)
             if tax_result_line:
-                # Should we check the rate with the tax amount?
-                # tax_amount = tax_result_line["taxCalculated"]
-                # rate = round(tax_amount / line.price_subtotal * 100, 2)
                 rate = tax_result_line.get("rate", 0.0)
                 tax = Tax.get_avalara_tax(rate, doc_type)
-                # TODO: ...
-                # line_avataxes = line.invoice_line_tax_ids.filtered("is_avatax")
-                # line_tax_rate = line.invoice_line_tax_ids.mapped("amount")
                 if tax not in line.invoice_line_tax_ids:
                     line_taxes = line.invoice_line_tax_ids.filtered(
                         lambda x: not x.is_avatax or x.amount == 0
                     )
                     line.invoice_line_tax_ids = line_taxes | tax
+                line.tax_amt = tax_result_line["tax"]
+        self.avatax_amount = tax_result["totalTax"]
         return True
 
     @api.multi
@@ -480,3 +506,24 @@ class AccountInvoiceLine(models.Model):
                 "tax_id": line.invoice_line_tax_ids,
             }
         return res
+
+    @api.depends(
+        'price_unit', 'discount', 'invoice_line_tax_ids', 'quantity',
+        'product_id', 'invoice_id.partner_id', 'invoice_id.currency_id',
+        'invoice_id.company_id', 'invoice_id.date_invoice', 'invoice_id.date',
+        'tax_amt')
+    def _compute_price(self):
+        super()._compute_price()
+        for line in self:
+            if line.tax_amt:
+                line.price_total = line.price_subtotal + line.tax_amt
+
+    @api.onchange('price_unit', 'discount', 'invoice_line_tax_ids', 'quantity')
+    def onchange_reset_avatax_amount(self):
+        """
+        When changing quantities or prices, reset the Avatax computed amount.
+        The Odoo computed tax amount will then be shown, as a reference.
+        The Avatax amount will be recomputed upon document validation.
+        """
+        for line in self:
+            line.tax_amt = 0
