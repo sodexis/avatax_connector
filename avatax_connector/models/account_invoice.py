@@ -80,7 +80,7 @@ class AccountInvoice(models.Model):
             if inv.avatax_amount:
                 inv.amount_tax = inv.avatax_amount
                 inv.amount_total = inv.amount_untaxed + inv.amount_tax
-                sign = self.type in ['in_refund', 'out_refund'] and -1 or 1
+                sign = inv.type in ['in_refund', 'out_refund'] and -1 or 1
                 inv.amount_total_signed = inv.amount_total * sign
 
     @api.multi
