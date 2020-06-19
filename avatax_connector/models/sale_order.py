@@ -103,7 +103,7 @@ class SaleOrder(models.Model):
     tax_address = fields.Text("Tax Address Text")
     location_code = fields.Char("Location Code", help="Origin address location code")
 
-    @api.onchange('order_line')
+    @api.onchange('order_line.price_total', 'fiscal_position_id')
     def onchange_reset_avatax_amount(self):
         """
         When changing quantities or prices, reset the Avatax computed amount.
@@ -112,6 +112,7 @@ class SaleOrder(models.Model):
         """
         for order in self:
             order.tax_amount = 0
+            order.order_line.write({"tax_amt": 0})
 
     def _get_avatax_doc_type(self, commit=False):
         return "SalesOrder"
@@ -291,7 +292,7 @@ class SaleOrder(models.Model):
         self and self.ensure_one()
         has_avatax_tax = self.mapped("order_line.tax_id.is_avatax")
         avatax_config = self.company_id.get_avatax_config_company()
-        if not has_avatax_tax:
+        if not (has_avatax_tax and avatax_config):
             self.write({"tax_amount": 0})
         elif "rest" in avatax_config.service_url:
             self._avatax_compute_tax()
@@ -317,6 +318,7 @@ class SaleOrder(models.Model):
 
 class SaleOrderLine(models.Model):
     _inherit = "sale.order.line"
+
     tax_amt = fields.Float("Avalara Tax", help="tax calculate by avalara")
 
     def _avatax_prepare_line(self, sign=1, doc_type=None):
@@ -377,6 +379,7 @@ class SaleOrderLine(models.Model):
         """
         for line in self:
             line.tax_amt = 0
+            line.order_id.tax_amount = 0
 
     @api.depends('product_uom_qty', 'discount', 'price_unit', 'tax_id', 'tax_amt')
     def _compute_amount(self):
@@ -386,8 +389,5 @@ class SaleOrderLine(models.Model):
         super()._compute_amount()
         for line in self:
             if line.tax_amt:  # Has Avatax computed amount
-                vals = {
-                    'price_tax': line.tax_amt,
-                    'price_total': line.price_subtotal + line.tax_amt,
-                }
-                line.update(vals)
+                line.price_tax = line.tax_amt
+                line.price_total = line.price_subtotal + line.tax_amt

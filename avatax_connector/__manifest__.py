@@ -27,7 +27,7 @@ This module has Following Features:
 
 """,
     "category": "Generic Modules/Accounting",
-    "depends": ["account", "sale", "stock", "base_geolocalize",],
+    "depends": ["account", "sale_stock", "base_geolocalize"],
     "data": [
         "security/avalara_salestax_security.xml",
         "security/ir.model.access.csv",

@@ -1,9 +1,8 @@
 import logging
-
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
-
+from odoo.exceptions import UserError, ValidationError
 from .avatax_rest_api import AvaTaxRESTService
+
 
 _logger = logging.getLogger(__name__)
 
@@ -20,7 +19,6 @@ class ExemptionCode(models.Model):
     def name_get(self):
         def name(r):
             return r.code and "({}) {}".format(r.code, r.name) or r.name
-
         return [(r.id, name(r)) for r in self]
 
 
@@ -262,7 +260,7 @@ class AvalaraSalestax(models.Model):
 
             # if not avatax_config.address_validation:
             if not ship_from_address.date_validation:
-                raise UserError(_("Please validate the company address."))
+                raise UserError(_("Please validate your Company main address."))
 
         if avatax_config.disable_tax_calculation:
             _logger.info(

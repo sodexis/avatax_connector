@@ -1,7 +1,11 @@
+import logging
 import time
 from odoo import api, fields, models, _
 import odoo.addons.decimal_precision as dp
 from odoo.exceptions import UserError
+
+
+_logger = logging.getLogger(__name__)
 
 
 class AccountInvoice(models.Model):
@@ -89,7 +93,7 @@ class AccountInvoice(models.Model):
                 else invoice.partner_id
             )
 
-    @api.onchange('invoice_line_ids')
+    @api.onchange('invoice_line_ids', 'shipping_add_id', 'fiscal_position_id')
     def onchange_reset_avatax_amount(self):
         """
         When changing quantities or prices, reset the Avatax computed amount.
@@ -98,6 +102,7 @@ class AccountInvoice(models.Model):
         """
         for inv in self:
             inv.avatax_amount = 0
+            inv.invoice_line_ids.write({"tax_amt": 0})
 
     @api.multi
     def get_origin_tax_date(self):
@@ -172,6 +177,13 @@ class AccountInvoice(models.Model):
         # If commiting, and document exists, try unvoiding it
         # Error number 300 = GetTaxError, Expected Saved|Posted
         if commit and tax_result.get("number") == 300:
+            _logger.info(
+                "Document %s (%s) already exists in Avatax. "
+                "Should be a voided transaction. "
+                "Unvoiding and re-commiting.",
+                self.number,
+                doc_type
+            )
             avatax_config.unvoid_transaction(self.number, doc_type)
             avatax_config.commit_transaction(self.number, doc_type)
             return True
@@ -206,17 +218,18 @@ class AccountInvoice(models.Model):
             )
             if has_avatax_tax:
                 avatax_config = self.company_id.get_avatax_config_company()
-                if "rest" in avatax_config.service_url:
-                    invoice._avatax_compute_tax(commit=commit_avatax)
-                    invoice._onchange_invoice_line_ids()
-                else:
-                    taxes_grouped = invoice.get_taxes_values(
-                        contact_avatax=True, commit_avatax=commit_avatax
-                    )
-                    tax_lines = invoice.tax_line_ids.filtered("manual")
-                    for tax in taxes_grouped.values():
-                        tax_lines += tax_lines.new(tax)
-                    invoice.tax_line_ids = tax_lines
+                if avatax_config:
+                    if "rest" in avatax_config.service_url:
+                        invoice._avatax_compute_tax(commit=commit_avatax)
+                        invoice._onchange_invoice_line_ids()
+                    else:
+                        taxes_grouped = invoice.get_taxes_values(
+                            contact_avatax=True, commit_avatax=commit_avatax
+                        )
+                        tax_lines = invoice.tax_line_ids.filtered("manual")
+                        for tax in taxes_grouped.values():
+                            tax_lines += tax_lines.new(tax)
+                        invoice.tax_line_ids = tax_lines
         return True
 
     @api.multi
