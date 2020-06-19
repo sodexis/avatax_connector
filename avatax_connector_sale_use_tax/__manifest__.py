@@ -5,8 +5,8 @@
     "summary": "Use tax Calculation on Invoices and Sale Orders",
     "license": "AGPL-3",
     "description": """
-Use tax Calculation on Invoices and Sale Orders
-""",
+    Use tax Calculation on Invoices and Sale Orders
+    """,
     "category": "Generic Modules/Accounting",
     "depends": [
         'avatax_connector',
@@ -17,6 +17,9 @@ Use tax Calculation on Invoices and Sale Orders
     ],
     "data": [
         "data/avatax_data.xml",
+    ],
+    "demo": [
+        "demo/fiscal_position_demo.xml",
     ],
     'installable': True,
     'auto_install': True,
