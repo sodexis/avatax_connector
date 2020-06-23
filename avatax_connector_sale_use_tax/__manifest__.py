@@ -9,14 +9,16 @@
     """,
     "category": "Generic Modules/Accounting",
     "depends": [
+        'sale_margin',
         'avatax_connector',
-        # Found in https://github.com/OCA/account-fiscal-rule:
-        'account_tax_expensed',
-        'account_tax_expensed_sale',
-        'account_tax_python_percentage',
+        # Found in https://github.com/OCA/margin-analysis:
+        'account_invoice_margin',
     ],
     "data": [
         "data/avatax_data.xml",
+        "views/account_tax.xml",
+        "views/account_invoice.xml",
+        "views/sale_order.xml",
     ],
     "demo": [
         "demo/fiscal_position_demo.xml",
