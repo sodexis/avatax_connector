@@ -63,25 +63,7 @@ class AccountInvoice(models.Model):
     )
     warehouse_id = fields.Many2one("stock.warehouse", "Warehouse")
     disable_tax_calculation = fields.Boolean("Disable Avatax Tax calculation")
-    avatax_amount = fields.Float(
-        "Tax Code Amount",
-        digits=dp.get_precision("Sale Price")
-    )
-
-    @api.depends(
-        'invoice_line_ids.price_subtotal', 'tax_line_ids.amount',
-        'tax_line_ids.amount_rounding', 'currency_id', 'company_id',
-        'date_invoice', 'type',
-        'avatax_amount'
-    )
-    def _compute_amount(self):
-        super()._compute_amount()
-        for inv in self:
-            if inv.avatax_amount:
-                inv.amount_tax = inv.avatax_amount
-                inv.amount_total = inv.amount_untaxed + inv.amount_tax
-                sign = inv.type in ['in_refund', 'out_refund'] and -1 or 1
-                inv.amount_total_signed = inv.amount_total * sign
+    avatax_amount = fields.Float(digits=dp.get_precision("Sale Price"))
 
     @api.multi
     @api.depends("tax_on_shipping_address", "partner_id", "partner_shipping_id")
@@ -93,7 +75,7 @@ class AccountInvoice(models.Model):
                 else invoice.partner_id
             )
 
-    @api.onchange('invoice_line_ids', 'shipping_add_id', 'fiscal_position_id')
+    @api.onchange("invoice_line_ids", "shipping_add_id", "fiscal_position_id")
     def onchange_reset_avatax_amount(self):
         """
         When changing quantities or prices, reset the Avatax computed amount.
@@ -141,7 +123,8 @@ class AccountInvoice(models.Model):
         """
         sign = self.type == "out_invoice" and 1 or -1
         lines = [
-            line._avatax_prepare_line(sign, doc_type) for line in self.invoice_line_ids
+            line._avatax_prepare_line(sign, doc_type)
+            for line in self.invoice_line_ids
             if line.price_subtotal
         ]
         return lines
@@ -182,11 +165,11 @@ class AccountInvoice(models.Model):
                 "Should be a voided transaction. "
                 "Unvoiding and re-commiting.",
                 self.number,
-                doc_type
+                doc_type,
             )
             avatax_config.unvoid_transaction(self.number, doc_type)
             avatax_config.commit_transaction(self.number, doc_type)
-            return True
+            return tax_result
 
         tax_result_lines = {int(x["lineNumber"]): x for x in tax_result["lines"]}
         for line in self.invoice_line_ids:
@@ -201,7 +184,7 @@ class AccountInvoice(models.Model):
                     line.invoice_line_tax_ids = line_taxes | tax
                 line.tax_amt = tax_result_line["tax"]
         self.avatax_amount = tax_result["totalTax"]
-        return True
+        return tax_result
 
     @api.multi
     def avatax_compute_taxes(self, commit_avatax=False):
@@ -220,8 +203,17 @@ class AccountInvoice(models.Model):
                 avatax_config = self.company_id.get_avatax_config_company()
                 if avatax_config:
                     if "rest" in avatax_config.service_url:
-                        invoice._avatax_compute_tax(commit=commit_avatax)
-                        invoice._onchange_invoice_line_ids()
+                        avatax_result = invoice._avatax_compute_tax(
+                            commit=commit_avatax
+                        )
+                        # The Avatax response is passed in the context
+                        # to be used by Tax.compute_all()
+                        # _onchange_invoice_line_ids
+                        #    -> get_taxes_values
+                        #        -> Tax.compute_all
+                        invoice.with_context(
+                            avatax_result=avatax_result
+                        )._onchange_invoice_line_ids()
                     else:
                         taxes_grouped = invoice.get_taxes_values(
                             contact_avatax=True, commit_avatax=commit_avatax
@@ -260,14 +252,14 @@ class AccountInvoice(models.Model):
         avatax_config = self.company_id.get_avatax_config_company()
         account_tax_obj = self.env["account.tax"]
         tax_grouped = {}
-        # avatax charges customers per API call, so don't hit their API in every onchange, only when saving
+        # avatax charges customers per API call,
+        # so don't hit their API in every onchange, only when saving
         contact_avatax = (
             contact_avatax
             or self.env.context.get("contact_avatax")
             or avatax_config.enable_immediate_calculation
         )
         has_avatax = any(x.tax_id.is_avatax for x in self.tax_line_ids)
-        # TODO don't override get_taxes_values()
         if contact_avatax and self.type in ["out_invoice", "out_refund"] and has_avatax:
             avatax_id = account_tax_obj.search(
                 [
@@ -275,7 +267,7 @@ class AccountInvoice(models.Model):
                     ("type_tax_use", "in", ["sale", "all"]),
                     ("company_id", "=", self.company_id.id),
                 ],
-                limit=1
+                limit=1,
             )
             if not avatax_id:
                 raise UserError(
@@ -296,7 +288,6 @@ class AccountInvoice(models.Model):
                 ship_from_address_id = (
                     self.warehouse_id.partner_id or self.company_id.partner_id
                 )
-                o_tax_amt = 0.0
                 tax = avatax_id
 
                 commit = commit_avatax and not avatax_config.disable_tax_reporting
@@ -407,7 +398,35 @@ class AccountInvoice(models.Model):
                         tax_grouped[key]["base"] += val["base"]
             return tax_grouped
         else:
+            # REST API
+            # Original get_taxes_values can't be cleanly extended
+            # So it is reproduced here, it a small modification:
+            # The price_unit can have a specific computation
             tax_grouped = super(AccountInvoice, self).get_taxes_values()
+            tax_grouped = {}
+            round_curr = self.currency_id.round
+            for line in self.invoice_line_ids:
+                if not line.account_id or line.display_type:
+                    continue
+                price_unit = line._get_tax_price_unit()
+                tax_ids = line.invoice_line_tax_ids.with_context(avatax_line=line)
+                taxes = tax_ids.compute_all(
+                    price_unit,
+                    self.currency_id,
+                    line.quantity,
+                    line.product_id,
+                    self.partner_id
+                )["taxes"]
+                Tax = self.env["account.tax"]
+                for tax in taxes:
+                    val = self._prepare_tax_line_vals(line, tax)
+                    key = Tax.browse(tax["id"]).get_grouping_key(val)
+                    if key not in tax_grouped:
+                        tax_grouped[key] = val
+                        tax_grouped[key]["base"] = round_curr(val["base"])
+                    else:
+                        tax_grouped[key]["amount"] += val["amount"]
+                        tax_grouped[key]["base"] += round_curr(val["base"])
         return tax_grouped
 
     @api.model
@@ -458,22 +477,16 @@ class AccountInvoiceLine(models.Model):
 
     tax_amt = fields.Float("Avalara Tax", help="Tax computed by Avalara",)
 
-    @api.onchange("product_id")
-    def _onchange_product_id(self):
-        avatax_config = self.invoice_id.company_id.get_avatax_config_company()
-        if not avatax_config.disable_tax_calculation:
-            if self.invoice_id.type in ("out_invoice", "out_refund"):
-                taxes = self.product_id.taxes_id or self.account_id.tax_ids
-            else:
-                taxes = self.product_id.supplier_taxes_id or self.account_id.tax_ids
-
-            if not all(taxes.mapped("is_avatax")):
-                warning = {
-                    "title": _("Warning!"),
-                    "message": _("All used taxes must be configured to use Avatax!"),
-                }
-                return {"warning": warning}
-        return super(AccountInvoiceLine, self)._onchange_product_id()
+    @api.onchange("price_unit", "discount", "invoice_line_tax_ids", "quantity")
+    def onchange_reset_avatax_amount(self):
+        """
+        When changing quantities or prices, reset the Avatax computed amount.
+        The Odoo computed tax amount will then be shown, as a reference.
+        The Avatax amount will be recomputed upon document validation.
+        """
+        for line in self:
+            line.tax_amt = 0
+            line.invoice_id.avatax_amount = 0
 
     def _avatax_prepare_line(self, sign=1, doc_type=None):
         """
@@ -494,7 +507,7 @@ class AccountInvoiceLine(models.Model):
                 or line.product_id.categ_id.tax_code_id.name
             )
             amount = (
-                sign * line.price_unit * line.quantity * (1 - line.discount / 100.0)
+                sign * line.quantity * line._get_tax_price_unit()
             )
             # Calculate discount amount
             discount_amount = 0.0
@@ -520,23 +533,70 @@ class AccountInvoiceLine(models.Model):
             }
         return res
 
-    @api.depends(
-        'price_unit', 'discount', 'invoice_line_tax_ids', 'quantity',
-        'product_id', 'invoice_id.partner_id', 'invoice_id.currency_id',
-        'invoice_id.company_id', 'invoice_id.date_invoice', 'invoice_id.date',
-        'tax_amt')
-    def _compute_price(self):
-        super()._compute_price()
-        for line in self:
-            if line.tax_amt:
-                line.price_total = line.price_subtotal + line.tax_amt
+    @api.onchange("product_id")
+    def _onchange_product_id(self):
+        avatax_config = self.invoice_id.company_id.get_avatax_config_company()
+        if not avatax_config.disable_tax_calculation:
+            if self.invoice_id.type in ("out_invoice", "out_refund"):
+                taxes = self.product_id.taxes_id or self.account_id.tax_ids
+            else:
+                taxes = self.product_id.supplier_taxes_id or self.account_id.tax_ids
 
-    @api.onchange('price_unit', 'discount', 'invoice_line_tax_ids', 'quantity')
-    def onchange_reset_avatax_amount(self):
+            if not all(taxes.mapped("is_avatax")):
+                warning = {
+                    "title": _("Warning!"),
+                    "message": _("All used taxes must be configured to use Avatax!"),
+                }
+                return {"warning": warning}
+        return super(AccountInvoiceLine, self)._onchange_product_id()
+
+
+    def _get_tax_price_unit(self):
         """
-        When changing quantities or prices, reset the Avatax computed amount.
-        The Odoo computed tax amount will then be shown, as a reference.
-        The Avatax amount will be recomputed upon document validation.
+        Returns the Base Amount to use for Tax.
         """
-        for line in self:
-            line.tax_amt = 0
+        self.ensure_one()
+        return self.price_unit * (1 - (self.discount or 0.0) / 100.0)
+
+    @api.one
+    def _compute_price(self):
+        """
+        Sets the price_subtotal and price_total in the lines.
+        The price_tax is computed seprately, from the difference between these two.
+
+        REproduces the original code, since it was not extensible,
+        and we need to add the current line to the context,
+        so that Tax.compute_all can perform the specific calculations needed.
+        """
+        super()._compute_price()
+        currency = self.invoice_id and self.invoice_id.currency_id or None
+        price = self.price_unit * (1 - (self.discount or 0.0) / 100.0)
+        taxes = False
+        if self.invoice_line_tax_ids:
+            tax_ids = self.invoice_line_tax_ids.with_context(avatax_line=self)
+            taxes = tax_ids.compute_all(
+                price,
+                currency,
+                self.quantity,
+                product=self.product_id,
+                partner=self.invoice_id.partner_id
+            )
+        self.price_subtotal = price_subtotal_signed = (
+            taxes["total_excluded"] if taxes else self.quantity * price
+        )
+        self.price_total = taxes["total_included"] if taxes else self.price_subtotal
+        if (
+            self.invoice_id.currency_id
+            and self.invoice_id.currency_id != self.invoice_id.company_id.currency_id
+        ):
+            currency = self.invoice_id.currency_id
+            date = self.invoice_id._get_currency_rate_date()
+            price_subtotal_signed = currency._convert(
+                price_subtotal_signed,
+                self.invoice_id.company_id.currency_id,
+                self.company_id or self.env.user.company_id,
+                date or fields.Date.today(),
+            )
+        sign = self.invoice_id.type in ["in_refund", "out_refund"] and -1 or 1
+        self.price_subtotal_signed = price_subtotal_signed * sign
+        return

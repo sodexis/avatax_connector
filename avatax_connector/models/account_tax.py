@@ -39,10 +39,88 @@ class AccountTax(models.Model):
                     self._get_avalara_tax_domain(0, doc_type), limit=1
                 )
                 tax = tax_template.sudo().copy(default={"amount": tax_rate})
+                # If you get a unique constraint error here,
+                # check the data for your existing Avatax taxes.
                 tax.name = self._get_avalara_tax_name(tax_rate, doc_type)
             return tax
         else:
             return self
+
+    def _avatax_amount_compute_all(self):
+        avatax_amount = None
+        avatax_line = self.env.context.get("avatax_line")
+        if avatax_line:
+            avatax_result = self.env.context.get("avatax_result")
+            if avatax_result:  # force Avatax returned amounts
+                avatax_result_line = [
+                    x
+                    for x in avatax_result["lines"]
+                    if int(x["lineNumber"]) == avatax_line.id
+                ][0]
+                avatax_amount = avatax_result_line["tax"]
+            elif avatax_line.tax_amt:
+                # Use the last Avatax returned amount, or
+                # Recompute taxes using the configured
+                # taxable price (may differ from price)
+                avatax_amount = avatax_line.tax_amt
+        return avatax_amount
+
+    def compute_all(
+        self, price_unit, currency=None, quantity=1.0, product=None, partner=None
+    ):
+        """
+        Adopted as the central point to inject custom tax computations.
+
+        May be called for two different purposes:
+
+        a) from InvoiceLine._compute_price(), to set line amount before and after taxes.
+        b) from Invoice.get_taxes_values(), to set tax amount and base summary lines.
+
+        For this the context may contain:
+
+        - avatax_line: the line record being computed.
+          Its presence triggers the Avatax extension logic.
+        - avatax_result: the response from the Avatax service.
+          If available, will force the tax amounts returned.
+          In not, uses odoo computation to estimate the taxes.
+          The base amounts are kept, the tax amount is overriden.
+
+        RETURN: {
+            'total_excluded': 0.0,    # Total without taxes
+            'total_included': 0.0,    # Total with taxes
+            'base': 0.0,              # Taxable amount
+            'taxes': [{               # One dict for each tax in self and their children
+                'id': int,
+                'name': str,
+                'amount': float,
+                'base': float,
+                'sequence': int,
+                'account_id': int,
+                'refund_account_id': int,
+                'analytic': boolean,
+            }]
+        """
+        res = super().compute_all(price_unit, currency, quantity, product, partner)
+        avatax_line = self.env.context.get("avatax_line")
+        if avatax_line:
+            avatax_amount = self._avatax_amount_compute_all()
+            if not avatax_amount:
+                avatax_amount = (
+                    res["total_included"] - res["total_excluded"]
+                )
+                new_price_unit = avatax_line._get_tax_price_unit()
+                if price_unit != new_price_unit:
+                    new_res = super().compute_all(
+                        new_price_unit, currency, quantity, product, partner
+                    )
+                    avatax_amount = (
+                        new_res["total_included"] - new_res["total_excluded"]
+                    )
+            for tax_item in res["taxes"]:
+                if tax_item["amount"] != 0:
+                    tax_item["amount"] = avatax_amount
+            res["total_included"] = res["total_excluded"] + avatax_amount
+        return res
 
     @api.model
     def _get_compute_tax(
@@ -206,7 +284,6 @@ class AccountTax(models.Model):
 
     @api.model
     def cancel_tax(self, avatax_config, doc_code, doc_type, cancel_code):
-        """Sometimes we have not need to tax calculation, then method is used to cancel taxation"""
         if avatax_config.disable_tax_calculation:
             _logger.info(
                 "Avatax tax calculation is disabled. Skipping %s %s.",
