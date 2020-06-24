@@ -65,6 +65,13 @@ class AccountInvoice(models.Model):
     disable_tax_calculation = fields.Boolean("Disable Avatax Tax calculation")
     avatax_amount = fields.Float(digits=dp.get_precision("Sale Price"))
 
+    def _compute_amount(self):
+        super()._compute_amount()
+        for inv in self:
+            if inv.avatax_amount:
+                inv.amount_tax = inv.amount_tax
+                inv.amount_total = inv.amount_untaxed + inv.amount_tax
+
     @api.multi
     @api.depends("tax_on_shipping_address", "partner_id", "partner_shipping_id")
     def _compute_shipping_add_id(self):
@@ -84,7 +91,8 @@ class AccountInvoice(models.Model):
         """
         for inv in self:
             inv.avatax_amount = 0
-            inv.invoice_line_ids.write({"tax_amt": 0})
+            for line in inv.invoice_line_ids:
+                line.tax_amt = 0
 
     @api.multi
     def get_origin_tax_date(self):
@@ -125,7 +133,7 @@ class AccountInvoice(models.Model):
         lines = [
             line._avatax_prepare_line(sign, doc_type)
             for line in self.invoice_line_ids
-            if line.price_subtotal
+            if line.price_subtotal or line.quantity
         ]
         return lines
 

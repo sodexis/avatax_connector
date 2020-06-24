@@ -52,12 +52,11 @@ class AccountTax(models.Model):
         if avatax_line:
             avatax_result = self.env.context.get("avatax_result")
             if avatax_result:  # force Avatax returned amounts
-                avatax_result_line = [
-                    x
-                    for x in avatax_result["lines"]
-                    if int(x["lineNumber"]) == avatax_line.id
-                ][0]
-                avatax_amount = avatax_result_line["tax"]
+                avatax_result_lines = {
+                    int(x["lineNumber"]): x for x in avatax_result["lines"]
+                }
+                avatax_result_line = avatax_result_lines.get(avatax_line.id, {})
+                avatax_amount = avatax_result_line.get("tax", 0)
             elif avatax_line.tax_amt:
                 # Use the last Avatax returned amount, or
                 # Recompute taxes using the configured
@@ -105,9 +104,7 @@ class AccountTax(models.Model):
         if avatax_line:
             avatax_amount = self._avatax_amount_compute_all()
             if not avatax_amount:
-                avatax_amount = (
-                    res["total_included"] - res["total_excluded"]
-                )
+                avatax_amount = res["total_included"] - res["total_excluded"]
                 new_price_unit = avatax_line._get_tax_price_unit()
                 if price_unit != new_price_unit:
                     new_res = super().compute_all(

@@ -33,8 +33,8 @@ class SaleOrder(models.Model):
         )
         return invoice_vals
 
-    @api.depends("order_line.price_total")
-    def XXXX_amount_all(self):
+    @api.depends("order_line.price_total", "order_line.tax_amt")
+    def _amount_all(self):
         """
         Compute fields amount_untaxed, amount_tax, amount_total
         Their computation needs to be overriden,
@@ -105,7 +105,7 @@ class SaleOrder(models.Model):
     tax_address = fields.Text("Tax Address Text")
     location_code = fields.Char("Location Code", help="Origin address location code")
 
-    @api.onchange("order_line", "fiscal_position_id")
+    @api.onchange("order_line", "fiscal_position_id", "partner_shipping_id")
     def onchange_reset_avatax_amount(self):
         """
         When changing quantities or prices, reset the Avatax computed amount.
@@ -114,7 +114,8 @@ class SaleOrder(models.Model):
         """
         for order in self:
             order.tax_amount = 0
-            order.order_line.write({"tax_amt": 0})
+            for line in order.order_line:
+                line.tax_amt = 0
 
     def _get_avatax_doc_type(self, commit=False):
         return "SalesOrder"
@@ -127,7 +128,7 @@ class SaleOrder(models.Model):
         lines = [
             line._avatax_prepare_line(sign=1, doc_type=doc_type)
             for line in self.order_line
-            if line.price_unit
+            if line.price_unit or line.product_uom_qty
         ]
         return lines
 
