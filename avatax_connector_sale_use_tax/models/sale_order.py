@@ -30,16 +30,31 @@ class SaleOrder(models.Model):
         return doc_type
 
     def _avatax_compute_tax(self):
+        """
+        The computed tax is set on the regular tac field.
+        It needs to be move to the expense tax specific field
+        """
         super()._avatax_compute_tax()
         doc_type = self._get_avatax_doc_type()
         if self.tax_amount and doc_type.startswith("Purchase"):
-            for line in self.order_line:
-                line.tax_amt_expense = line.tax_amt
-                line.tax_amt = 0
             self.tax_amount = 0
             for line in self.order_line:
-                line._product_margin()
+                line.write({"tax_amt_expense": line.tax_amt, "tax_amt": 0})
+            self.order_line._product_margin()
         return True
+
+    @api.onchange("order_line", "fiscal_position_id")
+    def onchange_reset_avatax_amount(self):
+        """
+        When changing quantities or prices, reset the Avatax computed amount.
+        The Odoo computed tax amount will then be shown, as a reference.
+        The Avatax amount will be recomputed upon document validation.
+        """
+        super().onchange_reset_avatax_amount()
+        for order in self:
+            order.tax_amount = 0
+            for line in order.order_line:
+                line.tax_amt_expense = 0
 
 
 class SaleOrderLine(models.Model):
@@ -58,7 +73,9 @@ class SaleOrderLine(models.Model):
         "and expensed by the company.",
     )
 
-    @api.onchange("product_uom_qty", "discount", "price_unit", "tax_id")
+    @api.onchange(
+        "product_uom_qty", "discount", "price_unit", "tax_id", "purchase_price"
+    )
     def onchange_reset_avatax_amount(self):
         super().onchange_reset_avatax_amount()
         for line in self:
@@ -104,12 +121,10 @@ class SaleOrderLine(models.Model):
 
     def _avatax_prepare_line(self, sign=1, doc_type=None):
         res = super()._avatax_prepare_line(sign=sign, doc_type=doc_type)
-        if doc_type and "Purchase" in doc_type:
+        if res and doc_type and "Purchase" in doc_type:
             unit_cost = self._get_tax_price_unit()
             amount = sign * unit_cost * self.product_uom_qty
-            res.update(
-                {"discounted": False, "discount": 0.0, "amount": amount}
-            )
+            res.update({"discounted": False, "discount": 0.0, "amount": amount})
         return res
 
     def _product_margin(self):

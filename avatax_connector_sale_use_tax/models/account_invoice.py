@@ -5,7 +5,8 @@ class AccountInvoice(models.Model):
     _inherit = "account.invoice"
 
     amount_tax_expense = fields.Float(
-        string="Tax Expense", compute="_compute_amount_tax_expense",
+        string="Tax Expense",
+        compute="_compute_amount_tax_expense",
         # TODO: should this be compute="_compute_amount" ?
     )
 
@@ -48,6 +49,8 @@ class AccountInvoice(models.Model):
         Recompute taxes if the fiscal position is changed on the Invoice.
         """
         for line in self.mapped("invoice_line_ids"):
+            line.tax_amt = 0
+            line.tax_amt_expense = 0
             line._set_taxes()
 
     def _get_avatax_doc_type(self, commit=False):
@@ -70,24 +73,19 @@ class AccountInvoice(models.Model):
         """
         super()._compute_amount()
         for inv in self:
-            if inv.avatax_amount:
-                # TODO: redundant?
-                inv.amount_tax_expense = sum(
-                    line.tax_amt_expense or line.tax_expense
-                    for line in inv.invoice_line_ids
-                )
-                inv.amount_tax = 0
-                inv.amount_total = inv.amount_untaxed
-                inv.amount_total_signed = inv.amount_untaxed_signed
+            inv.amount_tax_expense = sum(
+                line.tax_amt_expense or line.tax_expense
+                for line in inv.invoice_line_ids
+            )
 
     def _avatax_compute_tax(self, commit=False):
         tax_result = super()._avatax_compute_tax(commit=commit)
         doc_type = self._get_avatax_doc_type()
         if self.amount_tax_expense and doc_type.startswith("Purchase"):
+            self.avatax_amount = 0
             for line in self.invoice_line_ids:
                 line.tax_amt_expense = line.tax_amt
                 line.tax_amt = 0
-            # self.tax_amt_expense = 0
         return tax_result
 
 
@@ -132,7 +130,9 @@ class AccountInvoiceLine(models.Model):
         compute="_compute_price", help="Total tax amount, collected plus expensed",
     )
 
-    @api.onchange("price_unit", "discount", "invoice_line_tax_ids", "quantity")
+    @api.onchange(
+        "price_unit", "discount", "invoice_line_tax_ids", "quantity", "purchase_price"
+    )
     def onchange_reset_avatax_amount(self):
         super().onchange_reset_avatax_amount()
         for line in self:
@@ -161,6 +161,7 @@ class AccountInvoiceLine(models.Model):
         "invoice_id.company_id",
         "invoice_id.date_invoice",
         "invoice_id.date",
+        "purchase_price",  # added
         "tax_amt",  # added
         "tax_amt_expense",  # added
     )
