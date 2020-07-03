@@ -21,17 +21,39 @@ class AccountInvoice(models.Model):
                 sum(line.tax_expense for line in inv.invoice_line_ids)
             )
 
-    def _prepare_tax_line_vals(self, line, tax):
-        """ Prepare values to create an account.invoice.tax line
-
-        The line parameter is an account.invoice.line, and the
-        tax parameter is the output of account.tax.compute_all().
+    def get_taxes_values(self, contact_avatax=False, commit_avatax=False):
         """
-        vals = super()._prepare_tax_line_vals(line, tax)
-        tax_expense = tax.get("amount_expense")
-        if tax_expense:
-            vals["amount_tax_expense"] = tax_expense
-        return vals
+        Extends the standard method reponsible for computing taxes.
+        Returns a dict with the taxes values, ready to be used to create tax_line_ids.
+        """
+        tax_grouped = super(AccountInvoice, self).get_taxes_values()
+        avatax_config = self.company_id.get_avatax_config_company()
+        has_ava_use = any(
+            x.tax_id.is_avatax and x.tax_id.is_expensed_tax for x in self.tax_line_ids
+        )
+        if self.type in ["out_invoice", "out_refund"] and avatax_config and has_ava_use:
+            Tax = self.env["account.tax"]
+            for line in self.invoice_line_ids:
+                tax_ids = line.invoice_line_tax_ids.filtered("is_expensed_tax")
+                if not line.account_id or line.display_type or not tax_ids:
+                    continue
+                price_unit = line._get_tax_price_unit()
+                taxes = tax_ids.compute_all(
+                    price_unit,
+                    self.currency_id,
+                    line.quantity,
+                    line.product_id,
+                    self.partner_id,
+                )["taxes"]
+                for tax in taxes:
+                    val = self._prepare_tax_line_vals(line, tax)
+                    key = Tax.browse(tax["id"]).get_grouping_key(val)
+                    tax_grouped_val = tax_grouped[key]
+                    tax_grouped_val.setdefault("amount_tax_expense", 0)
+                    tax_grouped_val["amount_tax_expense"] += tax.get(
+                        "amount_expense", 0
+                    )
+        return tax_grouped
 
     def tax_line_move_line_get(self):
         res = super().tax_line_move_line_get() or []
