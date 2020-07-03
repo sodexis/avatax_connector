@@ -51,7 +51,11 @@ class AccountInvoice(models.Model):
         for line in self.mapped("invoice_line_ids"):
             line.tax_amt = 0
             line.tax_amt_expense = 0
+            # _set_taxes() reapplies taxes based on Product and Fiscal position
+            # It resets the Unit Price to the List Price, but we don't want that
+            price = line.price_unit
             line._set_taxes()
+            line.price_unit = price
 
     def _get_avatax_doc_type(self, commit=False):
         doc_type = super()._get_avatax_doc_type(commit=commit)
