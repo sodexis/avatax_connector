@@ -112,6 +112,10 @@ class AccountInvoice(models.Model):
             for line in self.invoice_line_ids:
                 line.tax_amt_expense = line.tax_amt
                 line.tax_amt = 0
+        else:
+            self.amount_tax_expense = 0
+            for line in self.invoice_line_ids:
+                line.tax_amt_expense = 0
         return tax_result
 
 

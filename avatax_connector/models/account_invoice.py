@@ -190,8 +190,10 @@ class AccountInvoice(models.Model):
                         lambda x: not x.is_avatax or x.amount == 0
                     )
                     line.invoice_line_tax_ids = line_taxes | tax
-                line.tax_amt = tax_result_line["tax"]
-        self.avatax_amount = tax_result["totalTax"]
+                # Tax amount must be + sign, both for Invoices and Credit Notes
+                # Appropriate sign will be taken care of, based on type of doc
+                line.tax_amt = abs(tax_result_line["tax"])
+        self.avatax_amount = abs(tax_result["totalTax"])
         return tax_result
 
     @api.multi
