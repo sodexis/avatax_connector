@@ -196,6 +196,11 @@ class AccountInvoice(models.Model):
         self.avatax_amount = abs(tax_result["totalTax"])
         return tax_result
 
+    def _has_avatax_tax(self):
+        self.ensure_one()
+        is_avatax_list = self.mapped("invoice_line_ids.invoice_line_tax_ids.is_avatax")
+        return is_avatax_list and any(x for x in is_avatax_list)
+
     @api.multi
     def avatax_compute_taxes(self, commit_avatax=False):
         """
@@ -206,10 +211,7 @@ class AccountInvoice(models.Model):
             # The onchange invoice lines call get_taxes_values()
             # and applies it to the invoice's tax_line_ids
             # invoice.with_context(contact_avatax=True)._onchange_invoice_line_ids()
-            has_avatax_tax = invoice.mapped(
-                "invoice_line_ids.invoice_line_tax_ids.is_avatax"
-            )
-            if has_avatax_tax:
+            if invoice._has_avatax_tax():
                 avatax_config = self.company_id.get_avatax_config_company()
                 if avatax_config:
                     if "rest" in avatax_config.service_url:
@@ -425,7 +427,7 @@ class AccountInvoice(models.Model):
                     self.currency_id,
                     line.quantity,
                     line.product_id,
-                    self.partner_id
+                    self.partner_id,
                 )["taxes"]
                 Tax = self.env["account.tax"]
                 for tax in taxes:
@@ -468,12 +470,9 @@ class AccountInvoice(models.Model):
     def action_cancel(self):
         for invoice in self:
             avatax_config = invoice.company_id.get_avatax_config_company()
-            has_avatax_tax = invoice.mapped(
-                "invoice_line_ids.invoice_line_tax_ids.is_avatax"
-            )
             if (
                 invoice.type in ["out_invoice", "out_refund"]
-                and has_avatax_tax
+                and invoice._has_avatax_tax()
                 and invoice.partner_id.country_id in avatax_config.country_ids
                 and invoice.state != "draft"
             ):
@@ -516,9 +515,7 @@ class AccountInvoiceLine(models.Model):
                 line.product_id.tax_code_id.name
                 or line.product_id.categ_id.tax_code_id.name
             )
-            amount = (
-                sign * line.quantity * line._get_tax_price_unit()
-            )
+            amount = sign * line.quantity * line._get_tax_price_unit()
             # Calculate discount amount
             discount_amount = 0.0
             is_discounted = False
@@ -560,7 +557,6 @@ class AccountInvoiceLine(models.Model):
                 return {"warning": warning}
         return super(AccountInvoiceLine, self)._onchange_product_id()
 
-
     def _get_tax_price_unit(self):
         """
         Returns the Base Amount to use for Tax.
@@ -589,7 +585,7 @@ class AccountInvoiceLine(models.Model):
                 currency,
                 self.quantity,
                 product=self.product_id,
-                partner=self.invoice_id.partner_id
+                partner=self.invoice_id.partner_id,
             )
         self.price_subtotal = price_subtotal_signed = (
             taxes["total_excluded"] if taxes else self.quantity * price
