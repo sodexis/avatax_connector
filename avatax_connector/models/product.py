@@ -25,14 +25,7 @@ class ProductTaxCode(models.Model):
         required=True,
         help="Type of tax code as defined in AvaTax",
     )
-    company_id = fields.Many2one(
-        "res.company",
-        "Company",
-        required=True,
-        default=lambda self: self.env["res.company"]._company_default_get(
-            "product.tax.code"
-        ),
-    )
+    company_id = fields.Many2one("res.company")
 
 
 class ProductTemplate(models.Model):

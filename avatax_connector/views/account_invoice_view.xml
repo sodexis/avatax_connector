@@ -10,6 +10,14 @@
             <field name="type">form</field>
             <field name="arch" type="xml">
 
+                <button name="preview_invoice" position="before">
+                    <button name="action_avatax_compute_taxes"
+                        type="object"
+                        string="Compute Taxes"
+                        attrs="{'invisible': [('state', 'not in', ['draft'])]}"
+                    />
+                </button>
+
                 <field name="team_id" position="after">
                     <field name="exemption_code" readonly="1"/>
                     <field name="exemption_code_id" readonly="1"/>

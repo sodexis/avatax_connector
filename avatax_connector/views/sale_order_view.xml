@@ -12,6 +12,13 @@
             <field name="type">form</field>
             <field name="inherit_id" ref="sale.view_order_form"/>
             <field name="arch" type="xml">
+                <button name="action_confirm" position="after">
+                    <button name="avalara_compute_taxes"
+                        type="object"
+                        string="Compute Taxes"
+                        attrs="{'invisible': [('state', 'not in', ['draft'])]}"
+                    />
+                </button>
 		<!--
 	        <group class="oe_subtotal_footer oe_right" colspan="2" name="sale_total" position="replace">
 		     <group class="oe_subtotal_footer oe_right" name="sale_total" colspan="2">

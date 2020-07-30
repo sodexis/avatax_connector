@@ -236,6 +236,11 @@ class AccountInvoice(models.Model):
         return True
 
     @api.multi
+    def action_avatax_compute_taxes(self):
+        self.avatax_compute_taxes(commit_avatax=False)
+        return True
+
+    @api.multi
     def action_invoice_open(self):
         avatax_config = self.company_id.get_avatax_config_company()
         if avatax_config and avatax_config.force_address_validation:
