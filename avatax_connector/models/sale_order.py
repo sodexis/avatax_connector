@@ -277,11 +277,10 @@ class SaleOrder(models.Model):
             if tax_result_line:
                 rate = tax_result_line.get("rate", doc_type)
                 tax = Tax.get_avalara_tax(rate, doc_type)
-                if tax not in line.tax_id:
-                    line_taxes = line.tax_id.filtered(
-                        lambda x: not x.is_avatax or x.amount == 0
-                    )
-                    line.tax_id = line_taxes | tax
+                if rate and not(tax == line.tax_id.filtered("is_avatax")):
+                    non_avataxes = line.tax_id.filtered(
+                        lambda x: not x.is_avatax)
+                    line.tax_id = non_avataxes | tax
                 line.tax_amt = tax_result_line["tax"]
         self.tax_amount = tax_result.get("totalTax")
         return True
