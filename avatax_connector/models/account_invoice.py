@@ -185,11 +185,10 @@ class AccountInvoice(models.Model):
             if tax_result_line:
                 rate = tax_result_line.get("rate", 0.0)
                 tax = Tax.get_avalara_tax(rate, doc_type)
-                if tax not in line.invoice_line_tax_ids:
-                    line_taxes = line.invoice_line_tax_ids.filtered(
-                        lambda x: not x.is_avatax or x.amount == 0
-                    )
-                    line.invoice_line_tax_ids = line_taxes | tax
+                if rate and not(tax == line.invoice_line_tax_ids.filtered("is_avatax")):
+                    non_avataxes = line.invoice_line_tax_ids.filtered(
+                        lambda x: not x.is_avatax)
+                    line.invoice_line_tax_ids = non_avataxes | tax
                 # Tax amount must be + sign, both for Invoices and Credit Notes
                 # Appropriate sign will be taken care of, based on type of doc
                 line.tax_amt = abs(tax_result_line["tax"])
