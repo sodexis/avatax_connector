@@ -134,9 +134,7 @@ class ResPartner(models.Model):
             vals["state_id"] = vals.get("state_id") and vals["state_id"][0]
             vals["country_id"] = vals.get("country_id") and vals["country_id"][0]
 
-            company = partner.company_id or self.env.user.company_id
-            avatax_config = company.get_avatax_config_company()
-
+            avatax_config = self.env.user.company_id.get_avatax_config_company()
             if avatax_config:
                 try:
                     valid_address = self._validate_address(vals, avatax_config)
@@ -201,26 +199,12 @@ class ResPartner(models.Model):
     def _validate_address(self, address, avatax_config=False):
         """ Returns the valid address from the AvaTax Address Validation Service. """
         if not avatax_config:
-            company = self.company_id or self.env.user.company_id
-            avatax_config = company.get_avatax_config_company()
-
+            avatax_config = self.env.user.company_id.get_avatax_config_company()
         if not avatax_config:
             raise UserError(
                 _(
-                    "This module has not yet been setup.  Please refer to the Avatax module documentation."
-                )
-            )
-
-        # Create the AvaTax Address service with the configuration parameters set for the instance
-        if (
-            not avatax_config.account_number
-            or not avatax_config.license_key
-            or not avatax_config.service_url
-            or not avatax_config.request_timeout
-        ):
-            raise UserError(
-                _(
-                    "This module has not yet been setup.  Please refer to the Avatax module documentation."
+                    "This module has not yet been setup.  "
+                    "Please refer to the Avatax module documentation."
                 )
             )
 
@@ -281,9 +265,7 @@ class ResPartner(models.Model):
                 or vals.get("country_id")
                 or vals.get("state_id")
             ):
-                company = self.company_id or self.env.user.company_id
-                avatax_config = company.get_avatax_config_company()
-
+                avatax_config = self.env.user.company_id.get_avatax_config_company()
                 if avatax_config and avatax_config.validation_on_save:
                     brw_address = self.read(
                         ["street", "street2", "city", "state_id", "zip", "country_id"]
@@ -371,8 +353,6 @@ class ResPartner(models.Model):
                 or vals.get("country_id")
                 or vals.get("state_id")
             ):
-                company = self.company_id or self.env.user.company_id
-                avatax_config = company.get_avatax_config_company()
                 if vals.get("tax_exempt"):
                     if not vals.get("exemption_number") and not vals.get(
                         "exemption_code_id"
@@ -383,7 +363,9 @@ class ResPartner(models.Model):
                             )
                         )
 
-                # It will work when user want to validate address at customer creation, check option in avalara api form
+                # It will work when user want to validate address at customer creation,
+                # check option in avalara api form
+                avatax_config = self.env.user.company_id.get_avatax_config_company()
                 if avatax_config and avatax_config.validation_on_save:
 
                     if self.check_avatax_support(
