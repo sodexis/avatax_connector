@@ -185,7 +185,7 @@ class AccountInvoice(models.Model):
             if tax_result_line:
                 rate = tax_result_line.get("rate", 0.0)
                 tax = Tax.get_avalara_tax(rate, doc_type)
-                if rate and not(tax == line.invoice_line_tax_ids.filtered("is_avatax")):
+                if tax and not(tax == line.invoice_line_tax_ids.filtered("is_avatax")):
                     non_avataxes = line.invoice_line_tax_ids.filtered(
                         lambda x: not x.is_avatax)
                     line.invoice_line_tax_ids = non_avataxes | tax
