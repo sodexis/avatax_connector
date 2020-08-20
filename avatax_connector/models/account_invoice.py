@@ -13,16 +13,20 @@ class AccountInvoice(models.Model):
 
     _inherit = "account.invoice"
 
-    @api.onchange("partner_id", "company_id")
-    def _onchange_partner_id(self):
-        res = super(AccountInvoice, self)._onchange_partner_id()
+    @api.onchange('partner_shipping_id')
+    def _onchange_partner_shipping_id(self):
+        res = super(AccountInvoice, self)._onchange_partner_shipping_id()
         if not self.exemption_locked:
-            self.exemption_code = self.partner_id.exemption_number or ""
-            self.exemption_code_id = self.partner_id.exemption_code_id.id or None
-        if self.partner_id.validation_method:
-            self.is_add_validate = True
-        else:
-            self.is_add_validate = False
+            self.exemption_code = (
+                self.partner_shipping_id.exemption_number
+                or self.partner_id.exemption_number
+            )
+            self.exemption_code_id = (
+                self.partner_shipping_id.exemption_code_id
+                or self.partner_id.exemption_code_id.id
+            )
+        self.tax_on_shipping_address = bool(self.partner_shipping_id)
+        self.is_add_validate = bool(self.partner_shipping_id.validation_method)
         return res
 
     @api.onchange("warehouse_id")

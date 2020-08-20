@@ -1,9 +1,9 @@
 {
     "name": "Avalara Avatax Connector",
-    "version": "12.0.3.3.2",
+    "version": "12.0.3.4.0",
     "author": "Fabrice Henrion, Sodexis, Open Source Integrators",
     "summary": "Sales tax Calculation",
-    "license": "Other proprietary",
+    "license": "AGPL-3",
     "description": """
 
 The Avatax module automates the complex task of sales tax calculation with ease.

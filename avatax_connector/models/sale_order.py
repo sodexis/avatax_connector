@@ -6,17 +6,25 @@ from odoo.exceptions import UserError
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
-    @api.onchange("partner_id")
-    def onchange_partner_id(self):
-        """Override method to add new fields values.
-        @param part- update vals with partner exemption number and code,
-        also check address validation by avalara
+    @api.multi
+    @api.onchange("partner_shipping_id", "partner_id")
+    def onchange_partner_shipping_id(self):
         """
-        super(SaleOrder, self).onchange_partner_id()
-        self.exemption_code = self.partner_id.exemption_number or ""
-        self.exemption_code_id = self.partner_id.exemption_code_id.id or None
+        Apply the exemption number and code from either
+        the delivery address or the customer
+        """
+        res = super(SaleOrder, self).onchange_partner_shipping_id()
+        self.exemption_code = (
+            self.partner_shipping_id.exemption_number
+            or self.partner_id.exemption_number
+        )
+        self.exemption_code_id = (
+            self.partner_shipping_id.exemption_code_id
+            or self.partner_id.exemption_code_id.id
+        )
         self.tax_on_shipping_address = bool(self.partner_shipping_id)
-        self.is_add_validate = bool(self.partner_id.validation_method)
+        self.is_add_validate = bool(self.partner_shipping_id.validation_method)
+        return res
 
     @api.multi
     def _prepare_invoice(self):
@@ -277,9 +285,8 @@ class SaleOrder(models.Model):
             if tax_result_line:
                 rate = tax_result_line.get("rate", doc_type)
                 tax = Tax.get_avalara_tax(rate, doc_type)
-                if tax and not(tax == line.tax_id.filtered("is_avatax")):
-                    non_avataxes = line.tax_id.filtered(
-                        lambda x: not x.is_avatax)
+                if tax and not (tax == line.tax_id.filtered("is_avatax")):
+                    non_avataxes = line.tax_id.filtered(lambda x: not x.is_avatax)
                     line.tax_id = non_avataxes | tax
                 line.tax_amt = tax_result_line["tax"]
         self.tax_amount = tax_result.get("totalTax")
