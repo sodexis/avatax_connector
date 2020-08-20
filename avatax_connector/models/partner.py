@@ -13,7 +13,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ResPartner(models.Model):
-    """Update partner information by adding new fields according to avalara partner configuration"""
+    """
+    Update partner information by adding new fields
+    according to avalara partner configuration
+    """
 
     _inherit = "res.partner"
 
@@ -28,19 +31,22 @@ class ResPartner(models.Model):
     date_validation = fields.Date(
         "Last Validation Date",
         readonly=True,
+        copy=False,
         help="The date the address was last validated by AvaTax and accepted",
     )
     validation_method = fields.Selection(
         [("avatax", "AVALARA"), ("usps", "USPS"), ("other", "Other")],
         "Address Validation Method",
         readonly=True,
+        copy=False,
         help="It gets populated when the address is validated by the method",
     )
     validated_on_save = fields.Boolean(
         "Validated On Save",
-        help="Indicates if the address is already validated on save before calling the wizard",
+        help="Indicates if the address is already validated "
+        " on save before calling the wizard",
     )
-    customer_code = fields.Char("Customer Code")
+    customer_code = fields.Char("Customer Code", copy=False)
     tax_exempt = fields.Boolean(
         "Is Tax Exempt", help="Indicates the exemption tax calculation is compulsory"
     )
