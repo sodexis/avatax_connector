@@ -139,7 +139,7 @@ class AccountInvoice(models.Model):
             for line in self.invoice_line_ids
             if line.price_subtotal or line.quantity
         ]
-        return lines
+        return [x for x in lines if x]
 
     def _avatax_compute_tax(self, commit=False):
         """ Contact REST API and recompute taxes for a Sale Order """

@@ -138,7 +138,7 @@ class SaleOrder(models.Model):
             for line in self.order_line
             if line.price_unit or line.product_uom_qty
         ]
-        return lines
+        return [x for x in lines if x]
 
     def compute_tax(self):
         """ Create and update tax amount for each and every order line and shipping line.
@@ -265,6 +265,7 @@ class SaleOrder(models.Model):
         doc_type = self._get_avatax_doc_type()
         Tax = self.env["account.tax"]
         avatax_config = self.company_id.get_avatax_config_company()
+        import pudb; pu.db
         taxable_lines = self._avatax_prepare_lines(doc_type)
         tax_result = avatax_config.create_transaction(
             self.date_order,
