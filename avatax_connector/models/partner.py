@@ -20,14 +20,32 @@ class ResPartner(models.Model):
 
     _inherit = "res.partner"
 
-    exemption_number = fields.Char(
-        "Exemption Number", help="Indicates if the customer is exempt or not"
-    )
-    exemption_code_id = fields.Many2one(
-        "exemption.code",
-        "Exemption Code",
-        help="Indicates the type of exemption the customer may have",
-    )
+    @api.model
+    def _migrate_exemption_data(self):
+        """
+        Migrate values from old exemption fields
+        into the new per company property fields
+        """
+        companies = self.env['res.company'].search([])
+        for company in companies:
+            Partner = self.env['res.partner'].with_context(force_company=company.id)
+            pending_exempt_partners = Partner.search([
+                ('exemption_code_id', '!=', False),
+                ('property_exemption_code_id', '=', False),
+            ])
+            if pending_exempt_partners:
+                _LOGGER.info(
+                    'Migrating exemption data on %d partners for company %s',
+                    len(pending_exempt_partners),
+                    company.display_name
+                )
+            for partner in pending_exempt_partners:
+                partner.write({
+                    'property_tax_exempt': partner.tax_exempt,
+                    'property_exemption_code_id': partner.exemption_code_id.id,
+                    'property_exemption_number': partner.exemption_number,
+                })
+
     date_validation = fields.Date(
         "Last Validation Date",
         readonly=True,
@@ -48,7 +66,33 @@ class ResPartner(models.Model):
     )
     customer_code = fields.Char("Customer Code", copy=False)
     tax_exempt = fields.Boolean(
-        "Is Tax Exempt", help="Indicates the exemption tax calculation is compulsory"
+        "Is Tax Exempt (Deprecated))",
+        deprecated=True,
+    )
+    exemption_number = fields.Char(
+        "Exemption Number (Deprecated)",
+        deprecated=True,
+    )
+    exemption_code_id = fields.Many2one(
+        "exemption.code",
+        "Exemption Code (Deprecated)",
+        deprecated=True,
+    )
+    property_tax_exempt = fields.Boolean(
+        "Is Tax Exempt",
+        company_dependent=True,
+        help="This company or address can claim for tax exemption",
+    )
+    property_exemption_number = fields.Char(
+        "Exemption Number",
+        company_dependent=True,
+        help="The State identification number relevant fot the exemption"
+    )
+    property_exemption_code_id = fields.Many2one(
+        "exemption.code",
+        "Exemption Code",
+        company_dependent=True,
+        help="The type of exemption granted",
     )
     vat_id = fields.Char(
         "VAT ID",

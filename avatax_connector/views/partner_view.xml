@@ -2,6 +2,8 @@
 <odoo>
     <data>
 
+    <function model="res.partner" name="_migrate_exemption_data" />
+
     <!--
     Partner Tax & Address Validation
     -->
@@ -33,13 +35,15 @@
 
 		          	<group col="4" colspan="4" string="Tax Exemption">
                                     <group col="4" colspan="4">
-                                        <field name="tax_exempt"/>
-	                       <newline/>
-			       		<!-- Avalara recomemnded to use exemption code only, and not exemption number:
-			               <field name="exemption_number" attrs="{'invisible': [('tax_exempt','!=',True)]}"/>
-				       -->
-			               <field name="exemption_code_id" attrs="{'invisible': [('tax_exempt','!=',True)]}"/>
-                                </group>
+                                        <field name="property_tax_exempt"/>
+                                        <field name="tax_exempt" invisible="1"/>
+                                        <newline/>
+                                        <field name="property_exemption_code_id"
+                                               attrs="{'invisible': [('property_tax_exempt','!=',True)]}" />
+                                        <field name="property_exemption_number"
+                                               attrs="{'invisible': [('property_tax_exempt','!=',True)]}"/>
+                                        <field name="exemption_code_id" invisible="1" /><!-- deprecated -->
+                                    </group>
 	          		</group>
 
 	        	    </page>
@@ -52,8 +56,9 @@
                                 <field name="validation_method"/>
                             </group>
                             <group name="avatax_exemption" attrs="{'invisible': [('type', '!=', 'delivery')]}">
-                                <field name="tax_exempt"/>
-                                <field name="exemption_code_id" attrs="{'invisible': [('tax_exempt','!=',True)]}"/>
+                                <field name="property_tax_exempt"/>
+                                <field name="property_exemption_code_id" attrs="{'invisible': [('property_tax_exempt','!=',True)]}"/>
+                                <field name="property_exemption_number" attrs="{'invisible': [('property_tax_exempt','!=',True)]}"/>
                             </group>
                         </xpath>
 

@@ -7,21 +7,34 @@ class SaleOrder(models.Model):
     _inherit = "sale.order"
 
     @api.multi
-    @api.onchange("partner_shipping_id", "partner_id")
+    @api.onchange("partner_shipping_id", "partner_id", "company_id")
     def onchange_partner_shipping_id(self):
         """
         Apply the exemption number and code from either
         the delivery address or the customer
+
+        Only use exemption status from Customer child contact addresses.
+        If the delivey address is a different partner (not a child address),
+        then apply the Customer exception status
+        if the delivery Country and State match the Customer main address.
         """
         res = super(SaleOrder, self).onchange_partner_shipping_id()
-        self.exemption_code = (
-            self.partner_shipping_id.exemption_number
-            or self.partner_id.exemption_number
-        )
-        self.exemption_code_id = (
-            self.partner_shipping_id.exemption_code_id
-            or self.partner_id.exemption_code_id.id
-        )
+
+        customer_address = self.partner_id.commercial_partner_id
+        ship_address = self.tax_add_id
+        is_customer_address = ship_address.commercial_partner_id == customer_address
+        is_same_state = ship_address.state_id == customer_address.state_id
+        if is_customer_address:
+            exemption_address_naive = ship_address
+        elif is_same_state:
+            exemption_address_naive = customer_address
+        else:
+            exemption_address_naive = self.env['res.partner']  # Empty
+        exemption_address = exemption_address_naive.with_context(
+            force_company=self.company_id.id)
+        self.exemption_code = exemption_address.property_exemption_number
+        self.exemption_code_id = exemption_address.property_exemption_code_id
+
         self.tax_on_shipping_address = bool(self.partner_shipping_id)
         self.is_add_validate = bool(self.partner_shipping_id.validation_method)
         return res
