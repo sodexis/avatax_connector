@@ -6,38 +6,44 @@ from odoo.exceptions import UserError
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
-    @api.multi
     @api.onchange("partner_shipping_id", "partner_id", "company_id")
     def onchange_partner_shipping_id(self):
         """
-        Apply the exemption number and code from either
-        the delivery address or the customer
+        Apply the exemption number and code from the Invoice Partner Data
+        We can only apply an exemption status that matches the delivery
+        address Country and State.
 
-        Only use exemption status from Customer child contact addresses.
-        If the delivey address is a different partner (not a child address),
-        then apply the Customer exception status
-        if the delivery Country and State match the Customer main address.
+        The setup for this is to add contact/addresses for the Invoicing Partner,
+        for each of the states we can claim exepmtion for.
         """
         res = super(SaleOrder, self).onchange_partner_shipping_id()
 
-        customer_address = self.partner_id.commercial_partner_id
-        ship_address = self.tax_add_id
-        is_customer_address = ship_address.commercial_partner_id == customer_address
-        is_same_state = ship_address.state_id == customer_address.state_id
-        if is_customer_address:
-            exemption_address_naive = ship_address
-        elif is_same_state:
-            exemption_address_naive = customer_address
-        else:
-            exemption_address_naive = self.env['res.partner']  # Empty
+        invoice_partner = self.partner_invoice_id.commercial_partner_id
+        ship_to_address = self.tax_add_id
+        # Find an exemption address matching the Country + State
+        # of the Delivery address
+        exemption_addresses = (invoice_partner | invoice_partner.child_ids).filtered(
+            "property_tax_exempt"
+        )
+        exemption_address_naive = exemption_addresses.filtered(
+            lambda a: a.country_id == ship_to_address.country_id
+            and a.state_id == ship_to_address.state_id
+        )[:1]
+        # Force Company to get the correct values form the Property fields
         exemption_address = exemption_address_naive.with_context(
-            force_company=self.company_id.id)
+            force_company=self.company_id.id
+        )
         self.exemption_code = exemption_address.property_exemption_number
         self.exemption_code_id = exemption_address.property_exemption_code_id
 
         self.tax_on_shipping_address = bool(self.partner_shipping_id)
         self.is_add_validate = bool(self.partner_shipping_id.validation_method)
         return res
+
+    @api.onchange("partner_invoice_id")
+    def onchange_partner_invoice_id(self):
+        """Update exemption status when invoicing Address is changed"""
+        return self.onchange_partner_shipping_id()
 
     @api.multi
     def _prepare_invoice(self):
@@ -278,7 +284,6 @@ class SaleOrder(models.Model):
         doc_type = self._get_avatax_doc_type()
         Tax = self.env["account.tax"]
         avatax_config = self.company_id.get_avatax_config_company()
-        import pudb; pu.db
         taxable_lines = self._avatax_prepare_lines(doc_type)
         tax_result = avatax_config.create_transaction(
             self.date_order,

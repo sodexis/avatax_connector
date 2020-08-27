@@ -94,8 +94,13 @@
                 </ul>
                 <h4><b>Avalara Submissions/Transactions</b></h4>
                 <ul type="disc">
-					<li><b>Disable Avalara Tax Commit</b> -- validated invoices will not be sent to Avalara</li>
+                    <li><b>Disable Avalara Tax Commit</b> -- validated invoices will not be sent to Avalara</li>
                     <li><b>Enable UPC Taxability</b> -- this will transmit Odoo's product ean13 number instead of its Internal Reference. If there is no ean13 then the Internal Reference will be sent automatically.</li>
+                    <li><b>Use Invoicing Address for Exemption Status</b> --
+                        when looking up tax exemption status, use the Invoice Address
+                        instead of the Customer. This is can be useful for distributor
+                        use cases, where the party paying for the order is not the end
+                        Customer, but another company.
                 </ul>
                 <h4><b>Countries</b></h4>
                 <ul type="disc">
@@ -412,11 +417,21 @@ is allowed to manually edit them, to allow fixing eventual incorrect data.
             <h2 class="oe_slogan">Customer Invoices</h2>
             <div class="oe_span12">
                 <p>
+                </p>
                     The AvaTax module is integrated into Sales Invoices and is applied to each transaction. The transaction log in the AvaTax dashboard shows the invoice details and displays whether the transaction is in an uncommitted or committed status. A validated invoice will have a <b>Committed</b> status and a cancelled invoice will have a <b>Voided</b> status.
                 <p>
-					The module will check if there is a selected warehouse and will automatically determine the address of the warehouse and the origin location. If no address is assigned to the warehouse, the company address is used.
+                The module will check if there is a selected warehouse and will automatically determine the address of the warehouse and the origin location. If no address is assigned to the warehouse, the company address is used.
+                </p>
                 <p>
-					Discounts are handled when they are enabled in Odoo's settings. They are calculated as a net deduction on the line item cost before the total is sent to AvaTax.
+                Discounts are handled when they are enabled in Odoo's settings. They are calculated as a net deduction on the line item cost before the total is sent to AvaTax.
+                </p>
+                <p>
+                Tax exemption status is applied to the Invoice, using the
+                exemption information available for the Invoiced Customer, on its main
+                address or on any child Contact/Address.
+                An exemption status lookup is done using the State and Country of the
+                Delivery Address.
+                </p>
             </div>
         </div>
     </div>
@@ -548,11 +563,21 @@ is allowed to manually edit them, to allow fixing eventual incorrect data.
             <h2 class="oe_slogan">Sales Orders</h2>
             <div class="oe_span12">
                 <p>
-                    The AvaTax module is integrated into Sales Orders and allows computation of taxes. Sales order transactions do not appear in the in the AvaTax interface.
+                The AvaTax module is integrated into Sales Orders and allows computation of taxes. Sales order transactions do not appear in the in the AvaTax interface.
+                </p>
                 <p>
-					The information placed in the sales order will automatically pass to the invoice on the Avalara server and can be viewed in the AvaTax control panel.
+                The information placed in the sales order will automatically pass to the invoice on the Avalara server and can be viewed in the AvaTax control panel.
+                </p>
                 <p>
-					Discounts are handled when they are enabled in Odoo's settings. They will be reported as a net deduction on the line item cost.
+                Discounts are handled when they are enabled in Odoo's settings. They will be reported as a net deduction on the line item cost.
+                </p>
+                <p>
+                Tax exemption status is applied to the Sales Order, using the
+                exemption information available for the Invoicing Partner, on its main
+                address or on any child Contact/Address.
+                An exemption status lookup is done using the State and Country of the
+                Delivery Address.
+                </p>
             </div>
         </div>
     </div>

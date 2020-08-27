@@ -13,22 +13,25 @@ class AccountInvoice(models.Model):
 
     _inherit = "account.invoice"
 
-    @api.onchange('partner_shipping_id')
+    @api.onchange("partner_shipping_id")
     def _onchange_partner_shipping_id(self):
         res = super(AccountInvoice, self)._onchange_partner_shipping_id()
         if not self.exemption_locked:
-            customer_address = self.partner_id.commercial_partner_id
-            ship_address = self.shipping_add_id
-            is_customer_address = ship_address.commercial_partner_id == customer_address
-            is_same_state = ship_address.state_id == customer_address.state_id
-            if is_customer_address:
-                exemption_address_naive = ship_address
-            elif is_same_state:
-                exemption_address_naive = customer_address
-            else:
-                exemption_address_naive = self.env['res.partner']  # Empty
+            invoice_partner = self.partner_id.commercial_partner_id
+            ship_to_address = self.shipping_add_id
+            # Find an exemption address matching the Country + State
+            # of the Delivery address
+            exemption_addresses = (
+                invoice_partner | invoice_partner.child_ids
+            ).filtered("property_tax_exempt")
+            exemption_address_naive = exemption_addresses.filtered(
+                lambda a: a.country_id == ship_to_address.country_id
+                and a.state_id == ship_to_address.state_id
+            )[:1]
+            # Force Company to get the correct values form the Property fields
             exemption_address = exemption_address_naive.with_context(
-                force_company=self.company_id.id)
+                force_company=self.company_id.id
+            )
             self.exemption_code = exemption_address.property_exemption_number
             self.exemption_code_id = exemption_address.property_exemption_code_id
 
@@ -196,9 +199,10 @@ class AccountInvoice(models.Model):
             if tax_result_line:
                 rate = tax_result_line.get("rate", 0.0)
                 tax = Tax.get_avalara_tax(rate, doc_type)
-                if tax and not(tax == line.invoice_line_tax_ids.filtered("is_avatax")):
+                if tax and not (tax == line.invoice_line_tax_ids.filtered("is_avatax")):
                     non_avataxes = line.invoice_line_tax_ids.filtered(
-                        lambda x: not x.is_avatax)
+                        lambda x: not x.is_avatax
+                    )
                     line.invoice_line_tax_ids = non_avataxes | tax
                 # Tax amount must be + sign, both for Invoices and Credit Notes
                 # Appropriate sign will be taken care of, based on type of doc
