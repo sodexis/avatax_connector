@@ -42,6 +42,8 @@
                                                attrs="{'invisible': [('property_tax_exempt','!=',True)]}" />
                                         <field name="property_exemption_number"
                                                attrs="{'invisible': [('property_tax_exempt','!=',True)]}"/>
+                                        <field name="property_exemption_country_wide"
+                                               attrs="{'invisible': [('property_tax_exempt','!=',True)]}"/>
                                         <field name="exemption_code_id" invisible="1" /><!-- deprecated -->
                                     </group>
 	          		</group>

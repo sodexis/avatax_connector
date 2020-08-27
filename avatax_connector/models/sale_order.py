@@ -27,7 +27,10 @@ class SaleOrder(models.Model):
         )
         exemption_address_naive = exemption_addresses.filtered(
             lambda a: a.country_id == ship_to_address.country_id
-            and a.state_id == ship_to_address.state_id
+            and (
+                a.state_id == ship_to_address.state_id
+                or invoice_partner.property_exemption_country_wide
+            )
         )[:1]
         # Force Company to get the correct values form the Property fields
         exemption_address = exemption_address_naive.with_context(
