@@ -164,11 +164,11 @@ class ResPartner(models.Model):
             )
         return True
 
-    @api.onchange("tax_exempt")
+    @api.onchange("property_tax_exempt")
     def onchange_tax_exemption(self):
-        if not self.tax_exempt:
-            self.exemption_number = ""
-            self.exemption_code_id = None
+        if not self.property_tax_exempt:
+            self.property_exemption_number = ""
+            self.property_exemption_code_id = None
 
     def get_state_id(self, code, c_code):
         """ Returns the id of the state from the code. """
@@ -427,16 +427,6 @@ class ResPartner(models.Model):
                 or vals.get("country_id")
                 or vals.get("state_id")
             ):
-                if vals.get("tax_exempt"):
-                    if not vals.get("exemption_number") and not vals.get(
-                        "exemption_code_id"
-                    ):
-                        raise UserError(
-                            _(
-                                "Please enter either Exemption Number or Exemption Code for marking customer as Exempt."
-                            )
-                        )
-
                 # It will work when user want to validate address at customer creation,
                 # check option in avalara api form
                 avatax_config = self.env.user.company_id.get_avatax_config_company()
@@ -498,17 +488,6 @@ class ResPartner(models.Model):
                     "validated_on_save": False,
                 }
             )
-
-        # when tax exempt check then atleast exemption number or exemption code should be filled
-        if vals.get("tax_exempt", False):
-            if not vals.get("exemption_number", False) and not vals.get(
-                "exemption_code_id", False
-            ):
-                raise UserError(
-                    _(
-                        "Please enter either Exemption Number or Exemption Code for marking customer as Exempt."
-                    )
-                )
         # Follow the normal write process if it's a write operation from the wizard
         if self.env.context.get("from_validate_button", False):
             return super(ResPartner, self).write(vals)

@@ -96,11 +96,6 @@
                 <ul type="disc">
                     <li><b>Disable Avalara Tax Commit</b> -- validated invoices will not be sent to Avalara</li>
                     <li><b>Enable UPC Taxability</b> -- this will transmit Odoo's product ean13 number instead of its Internal Reference. If there is no ean13 then the Internal Reference will be sent automatically.</li>
-                    <li><b>Use Invoicing Address for Exemption Status</b> --
-                        when looking up tax exemption status, use the Invoice Address
-                        instead of the Customer. This is can be useful for distributor
-                        use cases, where the party paying for the order is not the end
-                        Customer, but another company.
                 </ul>
                 <h4><b>Countries</b></h4>
                 <ul type="disc">
@@ -388,26 +383,20 @@ The Exemption Code is the type of exemption,
 and the Exemption Number is an identification number to use on the customer's State.
 </p>
 <p>
-This exemption status will only be applied for delivery addresses
-in the State of the customer, as seen in its main address.
-If the delivery address is not a customer address, and it is not in the same State,
-the exemption status will not be applied.
+  This exemption status will only be applied for delivery addresses
+  in the State matching the State of the exemption address.
+  The same customer can have exemptiions on several states.
+  For this use additional Contact/Addresses for those states,
+  and enter the exempention details there.
 </p>
 <p>
-Exemption status in other States can be declared through additional
-delivery addresses on that Contact card, in the "Contacts &amp; Addresses" tab.
+  To make this data management simpler, is it possible to set the customer as exempt
+  country wide, using the corresponding checkbox. In this case the exemption status will
+  be used for delivery addresses in any state. Using this option has compliance risks, so
+  plase use it with care.
 </p>
-<p>
-As long as the delivery address is a customer address,
-under the "Contacts &amp; Addresses", it will be used for exemption status,
-overriding the main Customer exemption status.
-</p>
-<p>
-The exemption status is copied into the Sale order or Invoice, when the addresses are
-selected. These fields are read only for regular users, and the Accounting Manager
-is allowed to manually edit them, to allow fixing eventual incorrect data.
-        </p>
         </div>
+
 
     </div>
 </section>
