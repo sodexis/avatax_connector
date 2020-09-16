@@ -1,7 +1,7 @@
 This app was moved!
 ===================
 
-The Odoo 13.0 version for this app was mo«ved to a different name, ``account_avatax``.
+The Odoo 13.0 version for this app was moved to a different name, ``account_avatax``.
 
 You can download it from:
 https://apps.odoo.com/apps/modules/13.0/account_avatax/
