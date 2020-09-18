@@ -113,21 +113,9 @@ class AccountInvoice(models.Model):
 
     @api.multi
     def get_origin_tax_date(self):
-        for inv_obj in self:
-            if inv_obj.origin:
-                a = inv_obj.origin
-
-                if len(a.split(":")) > 1:
-                    inv_origin = a.split(":")[1]
-                else:
-                    inv_origin = a.split(":")[0]
-
-                inv_ids = self.search([("number", "=", inv_origin)])
-                for invoice in inv_ids:
-                    if invoice.date_invoice:
-                        return invoice.date_invoice
-                    else:
-                        return inv_obj.date_invoice
+        if self.invoice_doc_no:
+            orig_invoice = self.search([("name", "=", self.invoice_doc_no)])
+            return orig_invoice.invoice_date
         # else:
         return False
 
