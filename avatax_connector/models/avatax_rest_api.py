@@ -219,7 +219,7 @@ class AvaTaxRESTService:
                 "number": line["id"].id,
                 "quantity": line.get("qty", 1),
                 "taxCode": line.get("tax_code", None),
-            } for line in received_lines if line.get("amount")
+            } for line in received_lines
         ]
 
         if doc_date and type(doc_date) != str:
