@@ -72,7 +72,8 @@ class SaleOrder(models.Model):
         """
         super()._amount_all()
         for order in self:
-            if order.tax_amount:
+            has_avatax_tax = order.mapped("order_line.tax_id.is_avatax")
+            if has_avatax_tax:
                 order.update(
                     {
                         "amount_tax": order.tax_amount,
@@ -312,6 +313,8 @@ class SaleOrder(models.Model):
                     line.tax_id = non_avataxes | tax
                 line.tax_amt = tax_result_line["tax"]
         self.tax_amount = tax_result.get("totalTax")
+        # Force tax totals recomputation, to ensure teh Avatax amount is applied
+        self._amount_all()
         return True
 
     @api.multi
