@@ -16,6 +16,12 @@ class AccountInvoice(models.Model):
     @api.onchange("partner_shipping_id")
     def _onchange_partner_shipping_id(self):
         res = super(AccountInvoice, self)._onchange_partner_shipping_id()
+        self.tax_on_shipping_address = bool(self.partner_shipping_id)
+        self.is_add_validate = bool(self.partner_shipping_id.validation_method)
+        return res
+
+    @api.depends("partner_shipping_id", "partner_id", "company_id")
+    def _onchange_compute_exemption(self):
         if not self.exemption_locked:
             invoice_partner = self.partner_id.commercial_partner_id
             ship_to_address = self.shipping_add_id
@@ -38,10 +44,6 @@ class AccountInvoice(models.Model):
             self.exemption_code = exemption_address.property_exemption_number
             self.exemption_code_id = exemption_address.property_exemption_code_id
 
-        self.tax_on_shipping_address = bool(self.partner_shipping_id)
-        self.is_add_validate = bool(self.partner_shipping_id.validation_method)
-        return res
-
     @api.onchange("warehouse_id")
     def onchange_warehouse_id(self):
         if self.warehouse_id:
@@ -59,10 +61,19 @@ class AccountInvoice(models.Model):
     invoice_date = fields.Date("Tax Invoice Date", readonly=True)
     is_add_validate = fields.Boolean("Address Is Validated")
     exemption_code = fields.Char(
-        "Exemption Number", help="It show the customer exemption number"
+        "Exemption Number",
+        compute="_onchange_compute_exemption",
+        readonly=False,  # New computed writeable fields
+        store=True,
+        help="It show the customer exemption number"
     )
     exemption_code_id = fields.Many2one(
-        "exemption.code", "Exemption Code", help="It show the customer exemption code"
+        "exemption.code",
+        "Exemption Code",
+        compute="_onchange_compute_exemption",
+        readonly=False,  # New computed writeable fields
+        store=True,
+        help="It show the customer exemption code"
     )
     exemption_locked = fields.Boolean(
         help="Exemption code won't be automatically changed, "

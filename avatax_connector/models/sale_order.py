@@ -17,11 +17,16 @@ class SaleOrder(models.Model):
         for each of the states we can claim exepmtion for.
         """
         res = super(SaleOrder, self).onchange_partner_shipping_id()
+        self.tax_on_shipping_address = bool(self.partner_shipping_id)
+        self.is_add_validate = bool(self.partner_shipping_id.validation_method)
+        return res
 
-        invoice_partner = self.partner_invoice_id.commercial_partner_id
-        ship_to_address = self.tax_add_id
+    @api.depends("partner_shipping_id", "partner_id", "company_id")
+    def _onchange_compute_exemption(self):
         # Find an exemption address matching the Country + State
         # of the Delivery address
+        invoice_partner = self.partner_invoice_id.commercial_partner_id
+        ship_to_address = self.tax_add_id
         exemption_addresses = (invoice_partner | invoice_partner.child_ids).filtered(
             "property_tax_exempt"
         )
@@ -38,10 +43,6 @@ class SaleOrder(models.Model):
         )
         self.exemption_code = exemption_address.property_exemption_number
         self.exemption_code_id = exemption_address.property_exemption_code_id
-
-        self.tax_on_shipping_address = bool(self.partner_shipping_id)
-        self.is_add_validate = bool(self.partner_shipping_id.validation_method)
-        return res
 
     @api.onchange("partner_invoice_id")
     def onchange_partner_invoice_id(self):
@@ -94,11 +95,20 @@ class SaleOrder(models.Model):
             )
 
     exemption_code = fields.Char(
-        "Exemption Number", help="It show the customer exemption number"
+        "Exemption Number",
+        compute="_onchange_compute_exemption",
+        readonly=False,  # New computed writeable fields
+        store=True,
+        help="It show the customer exemption number"
     )
     is_add_validate = fields.Boolean("Address Is validated")
     exemption_code_id = fields.Many2one(
-        "exemption.code", "Exemption Code", help="It show the customer exemption code"
+        "exemption.code",
+        "Exemption Code",
+        compute="_onchange_compute_exemption",
+        readonly=False,  # New computed writeable fields
+        store=True,
+        help="It show the customer exemption code"
     )
     amount_untaxed = fields.Monetary(
         string="Untaxed Amount",
