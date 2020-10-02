@@ -21,10 +21,11 @@ class AccountInvoice(models.Model):
         return res
 
     @api.depends("partner_shipping_id", "partner_id", "company_id")
-    def _onchange_compute_exemption(self):
-        if not self.exemption_locked:
-            invoice_partner = self.partner_id.commercial_partner_id
-            ship_to_address = self.shipping_add_id
+    def _compute_onchange_exemption(self):
+        invoices_not_locked = self.filtered(lambda s: not s.exemption_locked)
+        for invoice in invoices_not_locked:
+            invoice_partner = invoice.partner_id.commercial_partner_id
+            ship_to_address = invoice.shipping_add_id
             # Find an exemption address matching the Country + State
             # of the Delivery address
             exemption_addresses = (
@@ -39,10 +40,10 @@ class AccountInvoice(models.Model):
             )[:1]
             # Force Company to get the correct values form the Property fields
             exemption_address = exemption_address_naive.with_context(
-                force_company=self.company_id.id
+                force_company=invoice.company_id.id
             )
-            self.exemption_code = exemption_address.property_exemption_number
-            self.exemption_code_id = exemption_address.property_exemption_code_id
+            invoice.exemption_code = exemption_address.property_exemption_number
+            invoice.exemption_code_id = exemption_address.property_exemption_code_id
 
     @api.onchange("warehouse_id")
     def onchange_warehouse_id(self):
@@ -62,18 +63,18 @@ class AccountInvoice(models.Model):
     is_add_validate = fields.Boolean("Address Is Validated")
     exemption_code = fields.Char(
         "Exemption Number",
-        compute="_onchange_compute_exemption",
+        compute=_compute_onchange_exemption,
         readonly=False,  # New computed writeable fields
         store=True,
-        help="It show the customer exemption number"
+        help="It show the customer exemption number",
     )
     exemption_code_id = fields.Many2one(
         "exemption.code",
         "Exemption Code",
-        compute="_onchange_compute_exemption",
+        compute=_compute_onchange_exemption,
         readonly=False,  # New computed writeable fields
         store=True,
-        help="It show the customer exemption code"
+        help="It show the customer exemption code",
     )
     exemption_locked = fields.Boolean(
         help="Exemption code won't be automatically changed, "
