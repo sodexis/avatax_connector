@@ -14,14 +14,14 @@ class SaleOrder(models.Model):
         address Country and State.
 
         The setup for this is to add contact/addresses for the Invoicing Partner,
-        for each of the states we can claim exepmtion for.
+        for each of the states we can claim exemption for.
         """
         res = super(SaleOrder, self).onchange_partner_shipping_id()
         self.tax_on_shipping_address = bool(self.partner_shipping_id)
         self.is_add_validate = bool(self.partner_shipping_id.validation_method)
         return res
 
-    @api.depends("partner_shipping_id", "partner_id", "company_id")
+    @api.depends("tax_add_id", "partner_invoice_id", "partner_id", "company_id")
     def _compute_onchange_exemption(self):
         for order in self:
             # Find an exemption address matching the Country + State
@@ -44,11 +44,6 @@ class SaleOrder(models.Model):
             )
             order.exemption_code = exemption_address.property_exemption_number
             order.exemption_code_id = exemption_address.property_exemption_code_id
-
-    @api.onchange("partner_invoice_id")
-    def onchange_partner_invoice_id(self):
-        """Update exemption status when invoicing Address is changed"""
-        return self.onchange_partner_shipping_id()
 
     @api.multi
     def _prepare_invoice(self):

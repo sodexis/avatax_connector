@@ -20,7 +20,7 @@ class AccountInvoice(models.Model):
         self.is_add_validate = bool(self.partner_shipping_id.validation_method)
         return res
 
-    @api.depends("partner_shipping_id", "partner_id", "company_id")
+    @api.depends("shipping_add_id", "partner_id", "company_id")
     def _compute_onchange_exemption(self):
         invoices_not_locked = self.filtered(lambda s: not s.exemption_locked)
         for invoice in invoices_not_locked:
