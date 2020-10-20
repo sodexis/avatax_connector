@@ -324,11 +324,7 @@ class SaleOrder(models.Model):
         return True
 
     @api.multi
-    def avalara_compute_taxes(self):
-        """
-        It used to called manually calculation method of Avalara
-        and get tax amount
-        """
+    def _avalara_compute_taxes(self):
         self and self.ensure_one()
         has_avatax_tax = self.mapped("order_line.tax_id.is_avatax")
         avatax_config = self.company_id.get_avatax_config_company()
@@ -339,6 +335,19 @@ class SaleOrder(models.Model):
         else:
             self.with_context(avatax_recomputation=True).compute_tax()
         return True
+
+    @api.multi
+    def avalara_compute_taxes(self):
+        """
+        Used for manual recalculation of Avalara taxes
+        from button on Sales Order form
+        """
+        self and self.ensure_one()
+        if self.state in ["done", "cancel"]:
+            raise UserError(
+                _("Cannot recompute taxes on Locked and Cancelled Sales Orders.")
+            )
+        return self._avalara_compute_taxes()
 
     @api.multi
     def action_confirm(self):
@@ -352,7 +361,7 @@ class SaleOrder(models.Model):
                     return addr.button_avatax_validate_address()
         res = super(SaleOrder, self).action_confirm()
         if avatax_config:
-            self.avalara_compute_taxes()
+            self._avalara_compute_taxes()
         return res
 
 

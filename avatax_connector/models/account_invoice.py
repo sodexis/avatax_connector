@@ -219,11 +219,7 @@ class AccountInvoice(models.Model):
         return is_avatax_list and any(x for x in is_avatax_list)
 
     @api.multi
-    def avatax_compute_taxes(self, commit_avatax=False):
-        """
-        Called from Invoice's Action menu.
-        Forces computation of the Invoice taxes
-        """
+    def _avatax_compute_taxes(self, commit_avatax=False):
         for invoice in self:
             # The onchange invoice lines call get_taxes_values()
             # and applies it to the invoice's tax_line_ids
@@ -255,8 +251,16 @@ class AccountInvoice(models.Model):
 
     @api.multi
     def action_avatax_compute_taxes(self):
-        self.avatax_compute_taxes(commit_avatax=False)
-        return True
+        """
+        Called from Invoice's Action menu.
+        Forces computation of the Invoice taxes
+        """
+        self and self.ensure_one()
+        if self.state in ["open", "in_payment", "paid", "cancel"]:
+            raise UserError(
+                _("Cannot recompute taxes on validated invoices.")
+            )
+        return self._avatax_compute_taxes(commit_avatax=False)
 
     @api.multi
     def action_invoice_open(self):
@@ -271,9 +275,9 @@ class AccountInvoice(models.Model):
         # , to ensure correct account moves
         # We can only commit to Avatax after validating the invoice
         # , because we need the generated Invoice number
-        self.avatax_compute_taxes(commit_avatax=False)
+        self._avatax_compute_taxes(commit_avatax=False)
         super(AccountInvoice, self).action_invoice_open()
-        self.avatax_compute_taxes(commit_avatax=True)
+        self._avatax_compute_taxes(commit_avatax=True)
         return True
 
     @api.multi
