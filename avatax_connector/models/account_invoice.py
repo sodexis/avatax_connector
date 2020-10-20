@@ -564,20 +564,18 @@ class AccountInvoiceLine(models.Model):
 
     @api.onchange("product_id")
     def _onchange_product_id(self):
+        res = super(AccountInvoiceLine, self)._onchange_product_id()
         avatax_config = self.invoice_id.company_id.get_avatax_config_company()
         if not avatax_config.disable_tax_calculation:
-            if self.invoice_id.type in ("out_invoice", "out_refund"):
-                taxes = self.product_id.taxes_id or self.account_id.tax_ids
-            else:
-                taxes = self.product_id.supplier_taxes_id or self.account_id.tax_ids
-
-            if not all(taxes.mapped("is_avatax")):
+            avataxes = self.invoice_id.invoice_line_ids.mapped(
+                "invoice_line_tax_ids.is_avatax")
+            if any(avataxes) and not all(avataxes):
                 warning = {
                     "title": _("Warning!"),
                     "message": _("All used taxes must be configured to use Avatax!"),
                 }
                 return {"warning": warning}
-        return super(AccountInvoiceLine, self)._onchange_product_id()
+        return res
 
     def _get_tax_price_unit(self):
         """
