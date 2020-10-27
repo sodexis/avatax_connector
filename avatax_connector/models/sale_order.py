@@ -50,15 +50,31 @@ class SaleOrder(models.Model):
         invoice_vals = super(SaleOrder, self)._prepare_invoice()
         invoice_vals.update(
             {
-                "exemption_code": self.exemption_code or "",
-                "exemption_code_id": self.exemption_code_id.id or False,
-                "exemption_locked": True,
                 "location_code": self.location_code or "",
                 "warehouse_id": self.warehouse_id.id or "",
                 "tax_on_shipping_address": self.tax_on_shipping_address,
             }
         )
         return invoice_vals
+
+    def action_invoice_create(self, grouped=False, final=False):
+        """
+        Computed writeable fields cannot be set values on create.
+        So, setting the SO exemprion code on the Invoice
+        does not work on _prepare_invoice(),
+        and is written here, after invoice creation.
+        """
+        invoice_ids = super().action_invoice_create(grouped=grouped, final=final)
+        invoices = self.env["account.invoice"].browse(invoice_ids)
+        for order in self:
+            if order.exemption_code_id or order.exemption_code:
+                order_new_invoices = invoices & order.invoice_ids
+                order_new_invoices.write({
+                    "exemption_code": order.exemption_code or "",
+                    "exemption_code_id": order.exemption_code_id.id or False,
+                    "exemption_locked": True,
+                })
+        return invoice_ids
 
     @api.depends("order_line.price_total", "order_line.tax_amt")
     def _amount_all(self):
