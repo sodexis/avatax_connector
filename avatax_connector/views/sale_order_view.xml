@@ -16,7 +16,7 @@
                     <button name="avalara_compute_taxes"
                         type="object"
                         string="Compute Taxes"
-                        attrs="{'invisible': [('state', 'not in', ['draft'])]}"
+                        attrs="{'invisible': [('state', 'in', ['done', 'cancel'])]}"
                     />
                 </button>
 		<!--
