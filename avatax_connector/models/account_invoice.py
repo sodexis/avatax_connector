@@ -263,6 +263,18 @@ class AccountInvoice(models.Model):
         return self._avatax_compute_taxes(commit_avatax=False)
 
     @api.multi
+    def compute_taxes(self):
+        """
+        Function used in other module to compute the taxes on a fresh invoice created
+        (onchanges were not applied)
+        """
+        for invoice in self:
+            # If not taxes were computes yet, trigegr Avatax computation
+            if not invoice.amount_tax and not invoice.avatax_amount:
+                invoice._avatax_compute_taxes()
+        return super().compute_taxes()
+
+    @api.multi
     def action_invoice_open(self):
         avatax_config = self.company_id.get_avatax_config_company()
         if avatax_config and avatax_config.force_address_validation:
