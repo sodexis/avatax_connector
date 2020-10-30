@@ -76,7 +76,7 @@ class SaleOrder(models.Model):
                 })
         return invoice_ids
 
-    @api.depends("order_line.price_total", "order_line.tax_amt")
+    @api.depends("order_line.price_total", "order_line.tax_amt", "order_line.tax_id")
     def _amount_all(self):
         """
         Compute fields amount_untaxed, amount_tax, amount_total
