@@ -86,7 +86,9 @@ class SaleOrder(models.Model):
         super()._amount_all()
         for order in self:
             has_avatax_tax = order.mapped("order_line.tax_id.is_avatax")
-            if has_avatax_tax:
+            # Only use Avatax computed amount if there is one
+            # Otherwise use the doo computed one
+            if has_avatax_tax and order.tax_amount:
                 order.update(
                     {
                         "amount_tax": order.tax_amount,
