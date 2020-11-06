@@ -1,6 +1,6 @@
 {
     "name": "Use Tax on Customer Invoices with Avalara Avatax Connector",
-    "version": "12.0.1.0.0",
+    "version": "12.0.1.0.1",
     "author": "Open Source Integrators",
     "summary": "Use tax Calculation on Invoices and Sale Orders",
     "license": "AGPL-3",

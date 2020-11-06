@@ -1,4 +1,5 @@
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import ValidationError
 
 
 class AccountInvoice(models.Model):
@@ -57,6 +58,7 @@ class AccountInvoice(models.Model):
 
     def tax_line_move_line_get(self):
         res = super().tax_line_move_line_get() or []
+        return res  #FIXME
         for tax_line in sorted(self.tax_line_ids, key=lambda x: -x.sequence):
             if tax_line.amount_tax_expense and tax_line.tax_id.expense_account_id:
                 # Tax Payable move
@@ -117,6 +119,27 @@ class AccountInvoice(models.Model):
             for line in self.invoice_line_ids:
                 line.tax_amt_expense = 0
         return tax_result
+
+    def action_move_create(self):
+        """
+        Ensure the expense account moves are generated.
+        Apparently random cases were found where they were not generated.
+        This validation detects and prevents that from happening,
+        and should help understand the circumstances cauing that,
+        """
+        res = super().action_move_create()
+        for invoice in self:
+            expense_accounts_config = invoice.invoice_line_ids.mapped(
+                "invoice_line_tax_ids.expense_account_id"
+            )
+            expense_accounts_used = invoice.move_id.line_ids.mapped("account_id")
+            for account in expense_accounts_config:
+                if account not in expense_accounts_used:
+                    raise ValidationError(
+                        _("Invoice %s is missing expected tax accounting lines for %s")
+                        % (invoice.number, account.display_name)
+                    )
+        return res
 
 
 class AccountInvoiceTax(models.Model):
