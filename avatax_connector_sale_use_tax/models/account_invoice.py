@@ -58,7 +58,6 @@ class AccountInvoice(models.Model):
 
     def tax_line_move_line_get(self):
         res = super().tax_line_move_line_get() or []
-        return res  #FIXME
         for tax_line in sorted(self.tax_line_ids, key=lambda x: -x.sequence):
             if tax_line.amount_tax_expense and tax_line.tax_id.expense_account_id:
                 # Tax Payable move
@@ -134,7 +133,7 @@ class AccountInvoice(models.Model):
             )
             expense_accounts_used = invoice.move_id.line_ids.mapped("account_id")
             for account in expense_accounts_config:
-                if account not in expense_accounts_used:
+                if invoice.amount_tax_expense and account not in expense_accounts_used:
                     raise ValidationError(
                         _("Invoice %s is missing expected tax accounting lines for %s")
                         % (invoice.number, account.display_name)
