@@ -74,11 +74,12 @@ class SaleOrder(models.Model):
         })
         return invoice_vals
 
-    @api.depends('order_line.price_total')
+    @api.depends('order_line.price_total', 'order_line.tax_amt', 'tax_amount')
     def _amount_all(self):
         """
         Compute the total amounts of the SO.
         """
+        super()._amount_all()
         for order in self:
             amount_untaxed = amount_tax = 0.0
             for line in order.order_line:
@@ -124,9 +125,9 @@ class SaleOrder(models.Model):
     exemption_code = fields.Char('Exemption Number', help="It show the customer exemption number")
     is_add_validate = fields.Boolean('Address validated')
     exemption_code_id = fields.Many2one('exemption.code', 'Exemption Code', help="It show the customer exemption code")
-    amount_untaxed = fields.Monetary(string='Untaxed Amount', store=True, readonly=True, compute='_amount_all', track_visibility='always')
-    amount_tax = fields.Monetary(string='Taxes', store=True, readonly=True, compute='_amount_all', track_visibility='always')
-    amount_total = fields.Monetary(string='Total', store=True, readonly=True, compute='_amount_all', track_visibility='always')
+    amount_untaxed = fields.Monetary(string='Untaxed Amount', store=True, readonly=True, compute=_amount_all, track_visibility='always')
+    amount_tax = fields.Monetary(string='Taxes', store=True, readonly=True, compute=_amount_all, track_visibility='always')
+    amount_total = fields.Monetary(string='Total', store=True, readonly=True, compute=_amount_all, track_visibility='always')
     tax_amount = fields.Float('Tax Code Amount', digits=dp.get_precision('Sale Price'))
     tax_add_default = fields.Boolean('Default Address', readonly=True, states={'draft': [('readonly', False)]})
     tax_add_invoice = fields.Boolean('Invoice Address', readonly=True, states={'draft': [('readonly', False)]})
@@ -218,7 +219,7 @@ class SaleOrder(models.Model):
                     raise UserError(_('Please select system calls in Avatax API Configuration'))
             else:
                 for o_line in self.order_line:
-                        o_line.write({'tax_amt': 0.0})
+                    o_line.write({'tax_amt': 0.0})
 
         else:
             for o_line in self.order_line:
@@ -243,5 +244,3 @@ class SaleOrderLine(models.Model):
     _inherit = "sale.order.line"
 
     tax_amt = fields.Float('Avalara Tax', help="tax calculate by avalara")
-
-# vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:
