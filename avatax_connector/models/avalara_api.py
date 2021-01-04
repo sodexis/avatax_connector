@@ -195,6 +195,7 @@ class AvaTaxService:
         request.Lines = lines
         # And we're ready to make the call
         result = self.get_result(self.taxSvc, self.taxSvc.service.GetTax, request)
+        _logger.debug(result)
         return result
 
     def get_tax_history(self, company_code, doc_code, doc_type):

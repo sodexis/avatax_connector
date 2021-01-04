@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Avalara Avatax Connector",
-    "version": "1.0",
+    "version": "11.0.1.0.1",
     "author": "Fabrice Henrion",
     "summary": "Sales tax Calculation",
     "license": "LGPL-3",
