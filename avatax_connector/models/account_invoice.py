@@ -22,8 +22,25 @@ class AccountInvoice(models.Model):
 
     @api.depends("shipping_add_id", "partner_id", "company_id")
     def _compute_onchange_exemption(self):
-        invoices_not_locked = self.filtered(lambda s: not s.exemption_locked)
-        for invoice in invoices_not_locked:
+        """
+        Set the exemption to use for the Invoice.
+        An exemption can be applied if
+        there an exemption for the delivery address Country + State
+        - Get the delivery address Country & State
+        - Search the invoiced commercial partner addresses
+          for an exemption in this Country & State
+        - In case there is a "country wide" exemption, use it.
+
+        Example:
+        - ACME company partner, USA CA, has exemption status
+        - ACME Invoicing address, USA CA, no exemption status
+        - ACME Delivery address, USA CA, no exemption status
+
+        Invoice to ACME Invoicing, Shipped to ACME Delivery with be exempt.
+
+        For this to work properly, the "exemption_lock" is no longer supported.
+        """
+        for invoice in self:
             invoice_partner = invoice.partner_id.commercial_partner_id
             ship_to_address = invoice.shipping_add_id
             # Find an exemption address matching the Country + State
@@ -257,9 +274,7 @@ class AccountInvoice(models.Model):
         """
         self and self.ensure_one()
         if self.state in ["open", "in_payment", "paid", "cancel"]:
-            raise UserError(
-                _("Cannot recompute taxes on validated invoices.")
-            )
+            raise UserError(_("Cannot recompute taxes on validated invoices."))
         return self._avatax_compute_taxes(commit_avatax=False)
 
     @api.multi
@@ -522,7 +537,7 @@ class AccountInvoice(models.Model):
 class AccountInvoiceLine(models.Model):
     _inherit = "account.invoice.line"
 
-    tax_amt = fields.Float("Avalara Tax", help="Tax computed by Avalara",)
+    tax_amt = fields.Float("Avalara Tax", help="Tax computed by Avalara")
 
     @api.onchange("price_unit", "discount", "invoice_line_tax_ids", "quantity")
     def onchange_reset_avatax_amount(self):
@@ -584,7 +599,8 @@ class AccountInvoiceLine(models.Model):
         avatax_config = self.invoice_id.company_id.get_avatax_config_company()
         if not avatax_config.disable_tax_calculation:
             avataxes = self.invoice_id.invoice_line_ids.mapped(
-                "invoice_line_tax_ids.is_avatax")
+                "invoice_line_tax_ids.is_avatax"
+            )
             if any(avataxes) and not all(avataxes):
                 warning = {
                     "title": _("Warning!"),
