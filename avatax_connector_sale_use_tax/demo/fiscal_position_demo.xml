@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="fiscal_apply_sale" model="account.fiscal.position">
+        <field name="name">Apply Sales Tax</field>
+    </record>
+    <record id="fiscal_apply_sale_line" model="account.fiscal.position.tax">
+        <field name="position_id" ref="fiscal_apply_sale" />
+        <field name="tax_src_id" ref="avatax_connector.avatax" />
+        <field name="tax_dest_id" ref="avatax_sale" />
+    </record>
+
+    <record id="fiscal_apply_usetax" model="account.fiscal.position">
+        <field name="name">Apply Use Tax</field>
+    </record>
+    <record id="fiscal_apply_usetax_line" model="account.fiscal.position.tax">
+        <field name="position_id" ref="fiscal_apply_usetax" />
+        <field name="tax_src_id" ref="avatax_connector.avatax" />
+        <field name="tax_dest_id" ref="avatax_usetax" />
+    </record>
+
+</odoo>
