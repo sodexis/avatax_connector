@@ -59,11 +59,6 @@ class AccountTax(models.Model):
                 # Recompute taxes using the configured
                 # taxable price (may differ from price)
                 avatax_amount = avatax_line.tax_amt
-        # Invoices and Credit Notes used unsigned tax amounts
-        # Consider the case where avatax_amount might be None
-        # 2021/04/21: Removed "and abs(avatax_amount)" as this
-        # was causing tax amount duplication on invoices that
-        # have a credit on them
         return avatax_amount
 
     def compute_all(

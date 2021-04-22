@@ -568,13 +568,13 @@ class AccountInvoiceLine(models.Model):
                 line.product_id.tax_code_id.name
                 or line.product_id.categ_id.tax_code_id.name
             )
-            amount = sign * line.quantity * line._get_tax_price_unit()
+            amount = sign * abs(line.quantity) * line._get_tax_price_unit()
             # Calculate discount amount
             discount_amount = 0.0
             is_discounted = False
             if line.discount:
                 discount_amount = (
-                    sign * line.price_unit * line.quantity * line.discount / 100.0
+                    sign * abs(line.quantity) * line.price_unit * line.discount / 100.0
                 )
                 is_discounted = True
             res = {
