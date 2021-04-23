@@ -59,9 +59,7 @@ class AccountTax(models.Model):
                 # Recompute taxes using the configured
                 # taxable price (may differ from price)
                 avatax_amount = avatax_line.tax_amt
-        # Invoices and Credit Notes used unsigned tax amounts
-        # Consider the case where avatax_amount might be None
-        return avatax_amount and abs(avatax_amount)
+        return avatax_amount
 
     def compute_all(
         self, price_unit, currency=None, quantity=1.0, product=None, partner=None
