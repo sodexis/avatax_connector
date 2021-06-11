@@ -53,7 +53,7 @@ class AccountTax(models.Model):
                     int(x["lineNumber"]): x for x in avatax_result["lines"]
                 }
                 avatax_result_line = avatax_result_lines.get(avatax_line.id, {})
-                avatax_amount = avatax_result_line.get("tax", 0)
+                avatax_amount = abs(avatax_result_line.get("tax", 0))
             elif avatax_line.tax_amt:
                 # Use the last Avatax returned amount, or
                 # Recompute taxes using the configured
