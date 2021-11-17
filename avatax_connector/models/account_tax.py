@@ -53,7 +53,8 @@ class AccountTax(models.Model):
                     int(x["lineNumber"]): x for x in avatax_result["lines"]
                 }
                 avatax_result_line = avatax_result_lines.get(avatax_line.id, {})
-                avatax_amount = abs(avatax_result_line.get("tax", 0))
+                # Do not remove sign, as tax could be a negative amount
+                avatax_amount = avatax_result_line.get("tax", 0)
             elif avatax_line.tax_amt:
                 # Use the last Avatax returned amount, or
                 # Recompute taxes using the configured
@@ -99,7 +100,12 @@ class AccountTax(models.Model):
         res = super().compute_all(price_unit, currency, quantity, product, partner)
         avatax_line = self.env.context.get("avatax_line")
         if avatax_line:
-            avatax_amount = self._avatax_amount_compute_all()
+            sign = (
+                avatax_line.invoice_id.type in ['in_refund', 'out_refund'] and -1 or 1
+                if hasattr(avatax_line, "invoice_id")
+                else 1
+            )
+            avatax_amount = sign * self._avatax_amount_compute_all()
             if not avatax_amount:
                 avatax_amount = res["total_included"] - res["total_excluded"]
                 new_price_unit = avatax_line._get_tax_price_unit()
