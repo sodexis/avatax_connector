@@ -33,7 +33,6 @@ class AvalaraSalestaxPing(models.TransientModel):
                     avatax_config.logging,
                 )
                 avatax_restpoint.ping()
-                avatax_config.write({"date_expiration": "12/31/9998"})
             else:
                 avapoint = AvaTaxService(
                     avatax_config.account_number,

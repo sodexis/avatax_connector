@@ -38,7 +38,7 @@ class AvaTaxRESTService:
                 _(
                     "AvataxClient is not available in your system. "
                     "Please contact your system administrator "
-                    "to 'pip3 install Avatax'"
+                    "to 'pip3 install Avalara'"
                 )
             )
         if username and password:

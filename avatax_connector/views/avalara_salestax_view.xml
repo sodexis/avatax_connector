@@ -29,7 +29,6 @@
                                         <field name="license_key" password="True"/>
                                         <field name="service_url"/>
 					<field name="company_code"/>
-                                        <field name="date_expiration"/>
 					<a colspan="2" href="https://admin.avalara.com/" target="_blank">Visit the AvaTax Admin webpage</a>
                                         <button name="%(avatax_connector.action_avalara_salestax_ping)d"
                                                 string="Test Connection" type="action" icon="fa-television"/>
