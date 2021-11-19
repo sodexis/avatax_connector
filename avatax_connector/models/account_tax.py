@@ -105,7 +105,7 @@ class AccountTax(models.Model):
                 if hasattr(avatax_line, "invoice_id")
                 else 1
             )
-            avatax_amount = sign * self._avatax_amount_compute_all()
+            avatax_amount = sign * (self._avatax_amount_compute_all() or 0.0)
             if not avatax_amount:
                 avatax_amount = res["total_included"] - res["total_excluded"]
                 new_price_unit = avatax_line._get_tax_price_unit()
